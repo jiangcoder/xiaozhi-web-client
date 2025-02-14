@@ -1,67 +1,100 @@
-# 小智AI Web客户端实现
+# 小智Web客户端
 
-如果想体验小智项目，或者开发server端测试的同志，可以使用这个web端damo 体验下。
-语音端做好了，文字端做好了，可以语音加文字输出。
-等迭代慢慢完善。
+这是小智的Web客户端实现，提供了语音对话功能。
 
 ## 功能特点
 
 - 实时语音对话
-- 文本消息支持
+- 文字消息支持
+- WebSocket通信
+- Opus音频编码
 - 自动重连机制
 - 流式音频播放
-- 设备认证支持 WS token 同步了主仓库的server端
+- 设备认证支持
 
-## 安装
+## 快速开始
 
-1. 克隆仓库：
+### 方式一：直接运行
 
-```bash
-git clone https://github.com/TOM88812/xiaozhi-web-client.git
-```
-
-2. 进入项目目录：
-
-2. 安装依赖：
+1. 安装依赖：
 ```bash
 pip install -r requirements.txt
 ```
 
-3. 配置环境变量：
-创建 `.env` 文件并设置以下参数：
+2. 配置环境变量：
+创建 `.env` 文件并设置：
 ```
-DEVICE_TOKEN=your_token
 WS_URL=ws://your_server_address:9005
+DEVICE_TOKEN=your_token
+WEB_PORT=5001
+PROXY_PORT=5002
 ```
 
-## 运行
-
-1. 启动Web服务器：
+3. 启动服务：
 ```bash
 python app.py
 ```
 
-3. 访问：
-打开浏览器访问 `http://localhost:5001`
+### 方式二：Docker运行
+
+1. 使用docker-compose（推荐）：
+```bash
+# 构建并启动
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+```
+
+2. 或者直接使用Docker：
+```bash
+# 构建镜像
+docker build -t xiaozhi-web .
+
+# 运行容器
+docker run -d \
+  --name xiaozhi-web \
+  -p 5001:5001 \
+  -p 5002:5002 \
+  -e WS_URL=ws://your_server_address:9005 \
+  -e DEVICE_TOKEN=your_token \
+  xiaozhi-web
+```
+
+现在只需要运行一个命令即可启动所有服务，包括：
+- Web服务器 (默认端口 5001)
+- WebSocket代理服务器 (默认端口 5002)
+
+## 访问服务
+
+打开浏览器访问 `http://localhost:5001` 或 `http://你的IP:5001`
 
 ## 使用说明
 
-1. 打开网页后，系统会自动连接到WebSocket服务器
-2. 可以通过以下方式与小智对话：
-   - 点击"通话"按钮进行语音输入
-   - 在文本框输入文字后按回车或点击发送
+1. 点击"开始通话"按钮开始录音
+2. 再次点击结束录音
+3. 等待AI回复
+4. 也可以直接在输入框输入文字进行对话
 
-## 配置说明
+## 项目结构
 
+- `app.py`: Web服务器，提供Web界面并管理代理服务
 - `proxy.py`: WebSocket代理服务器，处理音频转换和数据转发
-- `app.py`: Web服务器，提供Web界面
 - `templates/index.html`: 前端界面
+- `static/audio-processor.js`: 音频处理模块
 - `.env`: 环境配置文件
+- `Dockerfile`: Docker镜像构建文件
+- `docker-compose.yml`: Docker服务编排文件
 
-### 环境变量
+## 注意事项
 
-- `DEVICE_TOKEN`: 设备认证令牌 //随便填吧
-- `WS_URL`: WebSocket服务器地址
+- 需要允许浏览器访问麦克风
+- 确保服务器地址和Token配置正确
+- 建议使用Chrome或Firefox浏览器
+- 如果使用Docker，确保端口没有被占用
 
 ## Star History
 
