@@ -28,11 +28,11 @@ DEVICE_TOKEN=your_token
 WS_URL=ws://your_server_address:9005
 ```
 
-## 运行
+## 运行 双开终端 或者 docker 
 
-1. 启动代理服务器：
+1. 启动Web服务器：
 ```bash
-python proxy.py
+python app.py
 ```
 
 3. 访问：
