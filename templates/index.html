@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>小智聊天室</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f2f5;
+        }
+
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a73e8;
+            margin-bottom: 20px;
+        }
+
+        .auth-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .connected {
+            background: #34a853;
+            color: white;
+        }
+
+        .disconnected {
+            background: #ea4335;
+            color: white;
+        }
+
+        .error {
+            background: #fbbc05;
+            color: white;
+        }
+
+        .chat-box {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .user {
+            background: #e3f2fd;
+            margin-left: auto;
+        }
+
+        .server {
+            background: #f5f5f5;
+            margin-right: auto;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #1557b0;
+        }
+
+        #recordButton {
+            background: #34a853;
+        }
+
+        #recordButton:hover {
+            background: #2d8a47;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .chat-container {
+                padding: 10px;
+            }
+
+            .message {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h1>小智聊天室</h1>
+        <div class="auth-info">
+            <div>设备ID: {{ device_id }}</div>
+            <div>Token: {{ token }}</div>
+            <div>状态: <span id="connectionStatus" class="status disconnected">未连接</span></div>
+        </div>
+        <div class="chat-box" id="chatBox"></div>
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">发送</button>
+            <button id="recordButton" onclick="toggleRecording()">录音</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isConnected = false;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let sessionId = null;
+        let audioQueue = [];
+        let isPlaying = false;
+        let audioContext = null;
+        let nextPlayTime = 0;
+        const wsUrl = "{{ ws_url }}";
+
+        // 初始化音频上下文
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000,  // 16kHz采样率
+                    latencyHint: 'interactive'
+                });
+                nextPlayTime = audioContext.currentTime;
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        // 播放音频队列
+        async function playNextAudio() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                return;
+            }
+            
+            try {
+                initAudioContext();
+                const audioBlob = audioQueue.shift();
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                
+                // 检查WAV头
+                const view = new DataView(arrayBuffer);
+                const magic = String.fromCharCode(...new Uint8Array(arrayBuffer.slice(0, 4)));
+                if (magic !== 'RIFF') {
+                    throw new Error('Invalid WAV format');
+                }
+                
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                
+                // 确保音频片段之间无间隙
+                const currentTime = audioContext.currentTime;
+                if (nextPlayTime < currentTime) {
+                    nextPlayTime = currentTime;
+                }
+                
+                source.start(nextPlayTime);
+                nextPlayTime += audioBuffer.duration;
+                
+                // 如果队列中还有数据，立即开始准备下一帧
+                if (audioQueue.length > 0) {
+                    requestAnimationFrame(() => playNextAudio());
+                } else {
+                    source.onended = () => {
+                        isPlaying = false;
+                    };
+                }
+            } catch (e) {
+                console.error('Audio playback error:', e);
+                isPlaying = false;
+                if (audioQueue.length > 0) {
+                    setTimeout(() => playNextAudio(), 10);
+                }
+            }
+        }
+
+        // 添加音频到队列
+        function queueAudio(audioBlob) {
+            audioQueue.push(audioBlob);
+            if (!isPlaying) {
+                isPlaying = true;
+                playNextAudio();
+            }
+        }
+
+        // 连接WebSocket
+        function connect() {
+            console.log('Connecting to:', wsUrl);
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                console.log('Connected to WebSocket server');
+                isConnected = true;
+                document.getElementById('connectionStatus').className = 'status connected';
+                document.getElementById('connectionStatus').textContent = '已连接';
+                
+                // 发送hello消息
+                const helloMessage = JSON.stringify({
+                    type: "hello"
+                });
+                console.log('Sending hello message:', helloMessage);
+                ws.send(helloMessage);
+            };
+            
+            ws.onclose = function(event) {
+                console.log('WebSocket closed with code:', event.code, 'reason:', event.reason);
+                isConnected = false;
+                sessionId = null;
+                document.getElementById('connectionStatus').className = 'status disconnected';
+                document.getElementById('connectionStatus').textContent = '未连接';
+                
+                // 3秒后重连
+                setTimeout(connect, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                console.error('WebSocket readyState:', ws.readyState);
+                isConnected = false;
+                sessionId = null;
+                document.getElementById('connectionStatus').className = 'status error';
+                document.getElementById('connectionStatus').textContent = '连接错误';
+            };
+            
+            ws.onmessage = async function(event) {
+                try {
+                    if (event.data instanceof Blob) {
+                        queueAudio(event.data);
+                    } else {
+                        // 处理JSON消息
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'hello') {
+                            sessionId = data.session_id;
+                            console.log('Session initialized:', sessionId);
+                        } else if (data.type === 'stt') {
+                            appendMessage('server', `[识别结果] ${data.text}`);
+                        } else if (data.type === 'llm') {
+                            if (data.emotion) {
+                                appendMessage('server', data.text);
+                            }
+                        } else if (data.type === 'tts') {
+                            if (data.state === 'sentence_start' && data.text) {
+                                appendMessage('server', data.text);
+                            }
+                        } else {
+                            appendMessage('server', JSON.stringify(data));
+                        }
+                    }
+                } catch (e) {
+                    console.error('Message handling error:', e);
+                    if (!(event.data instanceof Blob)) {
+                        appendMessage('server', event.data);
+                    }
+                }
+            };
+        }
+        
+        function appendMessage(sender, message) {
+            const chatBox = document.getElementById('chatBox');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = sender === 'user' ? 'message user' : 'message server';
+            messageDiv.textContent = message;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message && ws && isConnected && sessionId) {
+                // 发送文本消息
+                const textMessage = JSON.stringify({
+                    type: "listen",
+                    state: "detect",
+                    text: message
+                });
+                ws.send(textMessage);
+                appendMessage('user', message);
+                input.value = '';
+            } else if (!sessionId) {
+                console.error('No session ID available');
+                appendMessage('server', '连接未就绪，请稍后再试');
+            }
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        // 请求麦克风权限
+        async function setupRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                
+                mediaRecorder.ondataavailable = function(event) {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async function() {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    if (ws && isConnected) {
+                        ws.send(audioBlob);
+                    }
+                    audioChunks = [];
+                    document.getElementById('recordButton').textContent = '录音';
+                    isRecording = false;
+                };
+                
+                console.log('Recording setup complete');
+            } catch (e) {
+                console.error('Error setting up recording:', e);
+                alert('无法访问麦克风');
+            }
+        }
+
+        function toggleRecording() {
+            if (!mediaRecorder) {
+                setupRecording();
+                return;
+            }
+            
+            if (isRecording) {
+                mediaRecorder.stop();
+                document.getElementById('recordButton').textContent = '录音';
+            } else {
+                audioChunks = [];
+                mediaRecorder.start();
+                document.getElementById('recordButton').textContent = '停止';
+                isRecording = true;
+                
+                // 5秒后自动停止录音
+                setTimeout(() => {
+                    if (isRecording) {
+                        mediaRecorder.stop();
+                    }
+                }, 5000);
+            }
+        }
+
+        // 页面关闭时清理连接
+        window.onbeforeunload = function() {
+            if (ws) {
+                ws.close();
+            }
+        };
+
+        // 页面加载时连接
+        window.onload = connect;
+    </script>
+</body>
+</html> 
