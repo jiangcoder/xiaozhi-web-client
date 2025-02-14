@@ -168,6 +168,7 @@
         let silenceTimer = null;
         const SILENCE_TIMEOUT = 1000; // 1秒没有声音就自动停止
         let lastAudioTime = 0;
+        let currentResponseDiv = null;  // 当前回复的消息 div
 
         // 初始化音频处理器
         async function initAudioProcessor() {
@@ -358,9 +359,38 @@
                         if (data.type === 'hello') {
                             sessionId = data.session_id;
                             console.log('Session ID:', sessionId);
-                        }
-                        
-                        if (data.type === 'message') {
+                        } else if (data.type === 'stt') {
+                            // 语音识别结果
+                            appendMessage('user', `[语音识别] ${data.text}`);
+                            // 新的语音识别开始，清除之前的回复 div
+                            currentResponseDiv = null;
+                        } else if (data.type === 'llm') {
+                            // AI 回复
+                            if (data.text && data.text !== '😊') {
+                                appendMessage('server', data.text);
+                            }
+                        } else if (data.type === 'tts') {
+                            // TTS 状态消息
+                            if (data.state === 'start') {
+                                // 开始新的回复，创建新的消息 div
+                                currentResponseDiv = null;
+                            } else if (data.text) {
+                                // 只要有文本就立即显示
+                                if (!currentResponseDiv) {
+                                    // 如果是新回复，创建新的消息 div
+                                    currentResponseDiv = appendMessage('server', data.text);
+                                } else {
+                                    // 如果是同一回复的后续内容，追加到现有 div
+                                    currentResponseDiv.textContent += ' ' + data.text;
+                                    const chatBox = document.getElementById('chatBox');
+                                    chatBox.scrollTop = chatBox.scrollHeight;
+                                }
+                            } else if (data.state === 'stop') {
+                                // 回复结束，清除当前 div 引用
+                                currentResponseDiv = null;
+                            }
+                        } else if (data.type === 'message') {
+                            // 普通消息
                             appendMessage(data.role === 'assistant' ? 'server' : 'user', data.content);
                         }
                     }
@@ -377,6 +407,7 @@
             messageDiv.textContent = message;
             chatBox.appendChild(messageDiv);
             chatBox.scrollTop = chatBox.scrollHeight;
+            return messageDiv;  // 返回创建的消息 div
         }
         
         function sendMessage() {
