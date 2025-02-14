@@ -1,8 +1,12 @@
 # 小智AI Web客户端实现
 
 如果想体验小智项目，或者开发server端测试的同志，可以使用这个web端damo 体验下。
-由于是当天开发当天上传的，语音端还没有做好，只实现了文字端的，可以语音加文字输出。
+语音端做好了，文字端做好了，可以语音加文字输出。
 等迭代慢慢完善。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=TOM88812/xiaozhi-web-client&type=Date)](https://star-history.com/#TOM88812/xiaozhi-web-client&Date)
 
 ## 功能特点
 
@@ -10,7 +14,7 @@
 - 文本消息支持
 - 自动重连机制
 - 流式音频播放
-- 设备认证支持 WS token 同步了主仓库的server端，只认证mac
+- 设备认证支持 WS token 同步了主仓库的server端
 
 ## 安装
 
@@ -28,7 +32,7 @@ DEVICE_TOKEN=your_token
 WS_URL=ws://your_server_address:9005
 ```
 
-## 运行 双开终端 或者 docker 
+## 运行
 
 1. 启动Web服务器：
 ```bash
@@ -42,7 +46,7 @@ python app.py
 
 1. 打开网页后，系统会自动连接到WebSocket服务器
 2. 可以通过以下方式与小智对话：
-   - 点击"录音"按钮进行语音输入（最长5秒） //待迭代
+   - 点击"通话"按钮进行语音输入
    - 在文本框输入文字后按回车或点击发送
 
 ## 配置说明
