@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 import websockets
 import asyncio
 import json
+import threading
+import multiprocessing
+import atexit
+from proxy import WebSocketProxy  # 导入 proxy.py 中的 WebSocketProxy 类
 
 load_dotenv()
 
@@ -14,6 +18,7 @@ app = Flask(__name__, static_url_path='/static')
 WS_URL = os.getenv("WS_URL", "ws://10.1.5.14:9005")
 PROXY_URL = "ws://localhost:5002"  # WebSocket代理地址
 TOKEN = os.getenv("DEVICE_TOKEN", "123")
+proxy_process = None
 
 def get_mac_address():
     mac = uuid.getnode()
@@ -59,11 +64,34 @@ def test_connection():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+def cleanup():
+    """清理进程"""
+    global proxy_process
+    if proxy_process:
+        proxy_process.terminate()
+        proxy_process.join()
+        proxy_process = None
+
+def run_proxy():
+    """在单独的进程中运行proxy服务器"""
+    proxy = WebSocketProxy()
+    asyncio.run(proxy.main())
+
 if __name__ == '__main__':
+    # 注册退出时的清理函数
+    atexit.register(cleanup)
+    
     device_id = get_mac_address()
     print(f"Device ID: {device_id}")
     print(f"Token: {TOKEN}")
     print(f"WS URL: {WS_URL}")
     print(f"Proxy URL: {PROXY_URL}")
-    print("Starting server...")
-    app.run(host='0.0.0.0', port=5001, debug=True) 
+    
+    # 在单独的进程中启动proxy服务器
+    proxy_process = multiprocessing.Process(target=run_proxy)
+    proxy_process.start()
+    print("Proxy server started in background process")
+    
+    print("Starting web server...")
+    # 禁用调试模式运行Flask
+    app.run(host='0.0.0.0', port=5001, debug=False) 

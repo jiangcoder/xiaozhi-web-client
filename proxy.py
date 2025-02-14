@@ -139,16 +139,17 @@ class WebSocketProxy:
         except Exception as e:
             print(f"Client message handling error: {e}")
 
-async def main():
-    proxy = WebSocketProxy()
-    print(f"Starting proxy server...")
-    print(f"Device ID: {proxy.device_id}")
-    print(f"Token: {TOKEN}")
-    print(f"Target WS URL: {WS_URL}")
-    
-    server = await websockets.serve(proxy.proxy_handler, "0.0.0.0", 5002)
-    print("Proxy server is listening on ws://0.0.0.0:5002")
-    await asyncio.Future()  # 运行forever
+    async def main(self):
+        """启动代理服务器"""
+        print(f"Starting proxy server...")
+        print(f"Device ID: {self.device_id}")
+        print(f"Token: {TOKEN}")
+        print(f"Target WS URL: {WS_URL}")
+        
+        server = await websockets.serve(self.proxy_handler, "0.0.0.0", 5002)
+        print("Proxy server is listening on ws://0.0.0.0:5002")
+        await asyncio.Future()  # 运行forever
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    proxy = WebSocketProxy()
+    asyncio.run(proxy.main()) 
