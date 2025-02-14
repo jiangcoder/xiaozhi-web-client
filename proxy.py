@@ -12,8 +12,17 @@ import numpy as np
 load_dotenv()
 
 # 配置
-WS_URL = os.getenv("WS_URL", "ws://10.1.5.14:9005")
-TOKEN = os.getenv("DEVICE_TOKEN", "123")
+WS_URL = os.getenv("WS_URL")
+if not WS_URL:
+    print("警告: 未设置WS_URL环境变量，请检查.env文件")
+    WS_URL = "ws://localhost:9005"  # 默认值改为localhost
+
+TOKEN = os.getenv("DEVICE_TOKEN")
+if not TOKEN:
+    print("警告: 未设置DEVICE_TOKEN环境变量，请检查.env文件")
+    TOKEN = "123"  # 默认值
+
+PROXY_PORT = int(os.getenv("PROXY_PORT", "5002"))
 
 def get_mac_address():
     mac = uuid.getnode()
@@ -146,8 +155,8 @@ class WebSocketProxy:
         print(f"Token: {TOKEN}")
         print(f"Target WS URL: {WS_URL}")
         
-        server = await websockets.serve(self.proxy_handler, "0.0.0.0", 5002)
-        print("Proxy server is listening on ws://0.0.0.0:5002")
+        server = await websockets.serve(self.proxy_handler, "0.0.0.0", PROXY_PORT)
+        print(f"Proxy server is listening on ws://0.0.0.0:{PROXY_PORT}")
         await asyncio.Future()  # 运行forever
 
 if __name__ == "__main__":

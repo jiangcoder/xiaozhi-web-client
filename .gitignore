@@ -24,3 +24,8 @@ Thumbs.db
 *.opus
 *.pcm
 *.log
+
+# Environment variables
+.env
+.env.*
+!.env-exp

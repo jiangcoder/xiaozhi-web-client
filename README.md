@@ -4,10 +4,6 @@
 语音端做好了，文字端做好了，可以语音加文字输出。
 等迭代慢慢完善。
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=TOM88812/xiaozhi-web-client&type=Date)](https://star-history.com/#TOM88812/xiaozhi-web-client&Date)
-
 ## 功能特点
 
 - 实时语音对话
@@ -19,6 +15,12 @@
 ## 安装
 
 1. 克隆仓库：
+
+```bash
+git clone https://github.com/TOM88812/xiaozhi-web-client.git
+```
+
+2. 进入项目目录：
 
 2. 安装依赖：
 ```bash
@@ -61,3 +63,6 @@ python app.py
 - `DEVICE_TOKEN`: 设备认证令牌 //随便填吧
 - `WS_URL`: WebSocket服务器地址
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=TOM88812/xiaozhi-web-client&type=Date)](https://star-history.com/#TOM88812/xiaozhi-web-client&Date)

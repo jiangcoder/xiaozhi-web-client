@@ -8,16 +8,42 @@ import json
 import threading
 import multiprocessing
 import atexit
+import socket
 from proxy import WebSocketProxy  # 导入 proxy.py 中的 WebSocketProxy 类
 
 load_dotenv()
 
 app = Flask(__name__, static_url_path='/static')
 
+# 获取本机IP
+def get_local_ip():
+    try:
+        # 创建一个UDP socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # 连接任意可用地址(这里不会真的建立连接)
+        s.connect(('8.8.8.8', 80))
+        # 获取本机IP
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return '0.0.0.0'
+
 # 配置
-WS_URL = os.getenv("WS_URL", "ws://10.1.5.14:9005")
-PROXY_URL = "ws://localhost:5002"  # WebSocket代理地址
-TOKEN = os.getenv("DEVICE_TOKEN", "123")
+WS_URL = os.getenv("WS_URL")
+if not WS_URL:
+    print("警告: 未设置WS_URL环境变量，请检查.env文件")
+    WS_URL = "ws://localhost:9005"  # 默认值改为localhost
+
+LOCAL_IP = get_local_ip()
+WEB_PORT = int(os.getenv("WEB_PORT", "5001"))
+PROXY_PORT = int(os.getenv("PROXY_PORT", "5002"))
+PROXY_URL = f"ws://{LOCAL_IP}:{PROXY_PORT}"
+TOKEN = os.getenv("DEVICE_TOKEN")
+if not TOKEN:
+    print("警告: 未设置DEVICE_TOKEN环境变量，请检查.env文件")
+    TOKEN = "123"  # 默认值
+
 proxy_process = None
 
 def get_mac_address():
@@ -37,9 +63,8 @@ async def test_websocket_connection():
 @app.route('/')
 def index():
     device_id = get_mac_address()
-    token = os.getenv("DEVICE_TOKEN", "123")
-    ws_url = f"ws://localhost:5002"  # 代理服务器地址
-    return render_template('index.html', device_id=device_id, token=token, ws_url=ws_url)
+    ws_url = PROXY_URL  # 使用本机IP地址
+    return render_template('index.html', device_id=device_id, token=TOKEN, ws_url=ws_url)
 
 @app.route('/test_connection', methods=['GET'])
 def test_connection():
@@ -86,6 +111,8 @@ if __name__ == '__main__':
     print(f"Token: {TOKEN}")
     print(f"WS URL: {WS_URL}")
     print(f"Proxy URL: {PROXY_URL}")
+    print(f"Web server will run on port {WEB_PORT}")
+    print(f"Proxy server will run on port {PROXY_PORT}")
     
     # 在单独的进程中启动proxy服务器
     proxy_process = multiprocessing.Process(target=run_proxy)
@@ -94,4 +121,4 @@ if __name__ == '__main__':
     
     print("Starting web server...")
     # 禁用调试模式运行Flask
-    app.run(host='0.0.0.0', port=5001, debug=False) 
+    app.run(host='0.0.0.0', port=WEB_PORT, debug=False) 
