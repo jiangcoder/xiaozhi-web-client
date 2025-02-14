@@ -169,6 +169,9 @@
         const SILENCE_TIMEOUT = 1000; // 1秒没有声音就自动停止
         let lastAudioTime = 0;
         let currentResponseDiv = null;  // 当前回复的消息 div
+        const BUFFER_THRESHOLD = 3;     // 缓冲区阈值，当积累了这么多音频片段后开始播放
+        let audioBufferQueue = [];      // 音频缓冲区队列
+        let isAudioContextInitialized = false;
 
         // 初始化音频处理器
         async function initAudioProcessor() {
@@ -176,10 +179,9 @@
                 audioContext = new (window.AudioContext || window.webkitAudioContext)({
                     sampleRate: 16000
                 });
-            }
-            if (!audioProcessor) {
                 await audioContext.audioWorklet.addModule('/static/audio-processor.js');
             }
+            return audioContext;
         }
 
         // 修改为点击切换通话状态
@@ -436,10 +438,25 @@
             }
         }
         
+        // 初始化音频上下文
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000,  // 16kHz采样率
+                    latencyHint: 'interactive'
+                });
+                nextPlayTime = audioContext.currentTime;
+                isAudioContextInitialized = true;
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+        
         // 添加音频到队列
         function queueAudio(audioBlob) {
             audioQueue.push(audioBlob);
-            if (!isPlaying) {
+            if (!isPlaying && audioQueue.length >= BUFFER_THRESHOLD) {
                 isPlaying = true;
                 playNextAudio();
             }
@@ -467,45 +484,47 @@
                 const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
-                source.connect(audioContext.destination);
+
+                // 创建增益节点来控制音量和淡入淡出
+                const gainNode = audioContext.createGain();
+                source.connect(gainNode);
+                gainNode.connect(audioContext.destination);
                 
                 // 确保音频片段之间无间隙
                 const currentTime = audioContext.currentTime;
-                if (nextPlayTime < currentTime) {
-                    nextPlayTime = currentTime;
-                }
+                const startTime = Math.max(currentTime, nextPlayTime);
                 
-                source.start(nextPlayTime);
-                nextPlayTime += audioBuffer.duration;
+                // 添加淡入淡出效果
+                const fadeDuration = 0.005; // 5ms的淡入淡出
+                gainNode.gain.setValueAtTime(0, startTime);
+                gainNode.gain.linearRampToValueAtTime(1, startTime + fadeDuration);
+                gainNode.gain.setValueAtTime(1, startTime + audioBuffer.duration - fadeDuration);
+                gainNode.gain.linearRampToValueAtTime(0, startTime + audioBuffer.duration);
                 
-                // 如果队列中还有数据，立即开始准备下一帧
+                source.start(startTime);
+                nextPlayTime = startTime + audioBuffer.duration;
+                
+                // 如果队列中还有数据，使用 setTimeout 来安排下一次播放
                 if (audioQueue.length > 0) {
-                    requestAnimationFrame(() => playNextAudio());
+                    const timeUntilNextPlay = (startTime - currentTime) * 1000;
+                    setTimeout(() => playNextAudio(), Math.max(0, timeUntilNextPlay));
                 } else {
                     source.onended = () => {
-                        isPlaying = false;
+                        setTimeout(() => {
+                            if (audioQueue.length > 0) {
+                                playNextAudio();
+                            } else {
+                                isPlaying = false;
+                            }
+                        }, 50); // 50ms的缓冲时间
                     };
                 }
             } catch (e) {
                 console.error('Audio playback error:', e);
                 isPlaying = false;
                 if (audioQueue.length > 0) {
-                    setTimeout(() => playNextAudio(), 10);
+                    setTimeout(() => playNextAudio(), 100);
                 }
-            }
-        }
-
-        // 初始化音频上下文
-        function initAudioContext() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 16000,  // 16kHz采样率
-                    latencyHint: 'interactive'
-                });
-                nextPlayTime = audioContext.currentTime;
-            }
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
             }
         }
 
