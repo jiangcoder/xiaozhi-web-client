@@ -4,6 +4,21 @@ class AudioProcessor extends AudioWorkletProcessor {
         this.bufferSize = options.processorOptions.bufferSize;
         this.buffer = new Float32Array();
         this.sampleRate = 16000;
+        this.waitingForLastData = false;
+        
+        // 添加消息处理
+        this.port.onmessage = (e) => {
+            if (e.data.type === 'reset') {
+                this.resetBuffer();
+            } else if (e.data.type === 'getLastData') {
+                this.waitingForLastData = true;
+            }
+        };
+    }
+
+    resetBuffer() {
+        this.buffer = new Float32Array();
+        this.waitingForLastData = false;
     }
 
     process(inputs, outputs) {
@@ -25,12 +40,29 @@ class AudioProcessor extends AudioWorkletProcessor {
             // 转换为16位整数
             const pcmData = new Int16Array(this.bufferSize);
             for (let i = 0; i < chunk.length; i++) {
+                // 确保音频数据在[-1,1]范围内
                 const sample = Math.max(-1, Math.min(1, chunk[i]));
-                pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                // 转换为16位整数 (-32768 到 32767)
+                pcmData[i] = Math.round(sample * 32767);
             }
 
             // 发送数据到主线程
             this.port.postMessage(pcmData, [pcmData.buffer]);
+        }
+
+        // 如果正在等待最后的数据，并且缓冲区中还有数据，处理它们
+        if (this.waitingForLastData && this.buffer.length > 0) {
+            const pcmData = new Int16Array(this.buffer.length);
+            for (let i = 0; i < this.buffer.length; i++) {
+                const sample = Math.max(-1, Math.min(1, this.buffer[i]));
+                pcmData[i] = Math.round(sample * 32767);
+            }
+            this.port.postMessage(pcmData, [pcmData.buffer]);
+            this.buffer = new Float32Array();
+            
+            // 发送最后数据处理完成的消息
+            this.port.postMessage({ type: 'lastData' });
+            this.waitingForLastData = false;
         }
 
         return true;

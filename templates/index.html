@@ -146,7 +146,7 @@
         <div class="input-container">
             <input type="text" id="messageInput" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
             <button onclick="sendMessage()">发送</button>
-            <button id="recordButton" onclick="toggleRecording()">录音</button>
+            <button id="recordButton">录音</button>
         </div>
     </div>
 
@@ -165,6 +165,9 @@
         let audioStream = null;
         let processorNode = null;
         const wsUrl = "{{ ws_url }}";
+        let silenceTimer = null;
+        const SILENCE_TIMEOUT = 1000; // 1秒没有声音就自动停止
+        let lastAudioTime = 0;
 
         // 初始化音频处理器
         async function initAudioProcessor() {
@@ -176,6 +179,25 @@
             if (!audioProcessor) {
                 await audioContext.audioWorklet.addModule('/static/audio-processor.js');
             }
+        }
+
+        // 修改为点击切换通话状态
+        function initRecordButton() {
+            const button = document.getElementById('recordButton');
+            button.textContent = '开始通话';
+            
+            // 点击切换通话状态
+            button.addEventListener('click', async () => {
+                if (!isRecording) {
+                    await startRecording();
+                    button.textContent = '结束通话';
+                    button.style.background = '#ea4335';
+                } else {
+                    stopRecording();
+                    button.textContent = '开始通话';
+                    button.style.background = '#34a853';
+                }
+            });
         }
 
         // 开始录音
@@ -191,8 +213,9 @@
                 audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const source = audioContext.createMediaStreamSource(audioStream);
                 
-                // 如果已经有处理节点，先断开连接
+                // 如果已经有处理节点，先断开连接并重置
                 if (processorNode) {
+                    processorNode.port.postMessage({ type: 'reset' });
                     processorNode.disconnect();
                 }
                 
@@ -208,6 +231,8 @@
                     if (isRecording && ws && ws.readyState === WebSocket.OPEN) {
                         // 发送音频数据
                         ws.send(e.data.buffer);
+                        // 更新最后收到音频的时间
+                        lastAudioTime = Date.now();
                     }
                 };
 
@@ -225,8 +250,19 @@
                 }
 
                 isRecording = true;
-                document.getElementById('recordButton').textContent = '停止';
-                document.getElementById('recordButton').style.background = '#ea4335';
+                lastAudioTime = Date.now();
+                
+                // 启动静音检测
+                silenceTimer = setInterval(() => {
+                    if (isRecording && Date.now() - lastAudioTime > SILENCE_TIMEOUT) {
+                        // 检测到静音，发送静音帧
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            const silenceFrame = new Int16Array(960);
+                            ws.send(silenceFrame.buffer);
+                        }
+                    }
+                }, 100);
+
             } catch (err) {
                 console.error('Error starting recording:', err);
                 alert('无法访问麦克风');
@@ -235,15 +271,12 @@
 
         // 停止录音
         function stopRecording() {
-            isRecording = false;
-            if (audioStream) {
-                audioStream.getTracks().forEach(track => track.stop());
+            if (silenceTimer) {
+                clearInterval(silenceTimer);
+                silenceTimer = null;
             }
-            if (processorNode) {
-                processorNode.disconnect();
-            }
-
-            // 发送停止录音消息
+            
+            // 发送停止消息
             if (ws && ws.readyState === WebSocket.OPEN) {
                 const stopMessage = JSON.stringify({
                     type: "listen",
@@ -253,17 +286,19 @@
                 ws.send(stopMessage);
             }
 
-            document.getElementById('recordButton').textContent = '录音';
-            document.getElementById('recordButton').style.background = '#34a853';
-        }
-
-        // 切换录音状态
-        async function toggleRecording() {
-            if (!isRecording) {
-                await startRecording();
-            } else {
-                stopRecording();
+            // 清理资源
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
             }
+            
+            if (processorNode) {
+                processorNode.port.postMessage({ type: 'reset' });
+                processorNode.disconnect();
+                processorNode = null;
+            }
+            
+            isRecording = false;
         }
 
         // 连接WebSocket
@@ -451,7 +486,10 @@
         };
 
         // 页面加载时连接
-        window.onload = connect;
+        window.onload = () => {
+            connect();
+            initRecordButton();
+        };
     </script>
 </body>
 </html> 

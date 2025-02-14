@@ -22,12 +22,15 @@ def get_mac_address():
 def pcm_to_opus(pcm_data):
     """将PCM音频数据转换为Opus格式"""
     try:
-        # 创建编码器：16kHz, 单声道
+        # 创建编码器：16kHz, 单声道, VOIP模式
         encoder = opuslib.Encoder(16000, 1, 'voip')
         
         try:
-            # 编码PCM数据
-            opus_data = encoder.encode(pcm_data, 960)  # 使用960采样点 (60ms)
+            # 确保PCM数据是Int16格式
+            pcm_array = np.frombuffer(pcm_data, dtype=np.int16)
+            
+            # 编码PCM数据，每帧960个采样点
+            opus_data = encoder.encode(pcm_array.tobytes(), 960)  # 60ms at 16kHz
             return opus_data
             
         except opuslib.OpusError as e:
