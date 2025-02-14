@@ -8,7 +8,7 @@ import json
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static')
 
 # 配置
 WS_URL = os.getenv("WS_URL", "ws://10.1.5.14:9005")
@@ -31,10 +31,10 @@ async def test_websocket_connection():
 
 @app.route('/')
 def index():
-    return render_template('index.html', 
-                         device_id=get_mac_address(), 
-                         token=TOKEN, 
-                         ws_url=PROXY_URL)
+    device_id = get_mac_address()
+    token = os.getenv("DEVICE_TOKEN", "123")
+    ws_url = f"ws://localhost:5002"  # 代理服务器地址
+    return render_template('index.html', device_id=device_id, token=token, ws_url=ws_url)
 
 @app.route('/test_connection', methods=['GET'])
 def test_connection():
@@ -66,4 +66,4 @@ if __name__ == '__main__':
     print(f"WS URL: {WS_URL}")
     print(f"Proxy URL: {PROXY_URL}")
     print("Starting server...")
-    app.run(debug=True, port=5001, host='0.0.0.0') 
+    app.run(host='0.0.0.0', port=5001, debug=True) 

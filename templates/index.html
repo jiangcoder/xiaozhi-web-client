@@ -161,19 +161,221 @@
         let isPlaying = false;
         let audioContext = null;
         let nextPlayTime = 0;
+        let audioProcessor = null;
+        let audioStream = null;
+        let processorNode = null;
         const wsUrl = "{{ ws_url }}";
 
-        // 初始化音频上下文
-        function initAudioContext() {
+        // 初始化音频处理器
+        async function initAudioProcessor() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 16000,  // 16kHz采样率
-                    latencyHint: 'interactive'
+                    sampleRate: 16000
                 });
-                nextPlayTime = audioContext.currentTime;
             }
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
+            if (!audioProcessor) {
+                await audioContext.audioWorklet.addModule('/static/audio-processor.js');
+            }
+        }
+
+        // 开始录音
+        async function startRecording() {
+            try {
+                await initAudioProcessor();
+                
+                // 如果已经有流，先停止它
+                if (audioStream) {
+                    audioStream.getTracks().forEach(track => track.stop());
+                }
+                
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioContext.createMediaStreamSource(audioStream);
+                
+                // 如果已经有处理节点，先断开连接
+                if (processorNode) {
+                    processorNode.disconnect();
+                }
+                
+                // 创建音频处理节点
+                processorNode = new AudioWorkletNode(audioContext, 'audio-processor', {
+                    processorOptions: {
+                        bufferSize: 960 // 60ms at 16kHz
+                    }
+                });
+
+                // 处理音频数据
+                processorNode.port.onmessage = (e) => {
+                    if (isRecording && ws && ws.readyState === WebSocket.OPEN) {
+                        // 发送音频数据
+                        ws.send(e.data.buffer);
+                    }
+                };
+
+                source.connect(processorNode);
+                processorNode.connect(audioContext.destination);
+
+                // 发送开始录音消息
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const startMessage = JSON.stringify({
+                        type: "listen",
+                        state: "start",
+                        mode: "auto"
+                    });
+                    ws.send(startMessage);
+                }
+
+                isRecording = true;
+                document.getElementById('recordButton').textContent = '停止';
+                document.getElementById('recordButton').style.background = '#ea4335';
+            } catch (err) {
+                console.error('Error starting recording:', err);
+                alert('无法访问麦克风');
+            }
+        }
+
+        // 停止录音
+        function stopRecording() {
+            isRecording = false;
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+            }
+            if (processorNode) {
+                processorNode.disconnect();
+            }
+
+            // 发送停止录音消息
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const stopMessage = JSON.stringify({
+                    type: "listen",
+                    state: "stop",
+                    mode: "auto"
+                });
+                ws.send(stopMessage);
+            }
+
+            document.getElementById('recordButton').textContent = '录音';
+            document.getElementById('recordButton').style.background = '#34a853';
+        }
+
+        // 切换录音状态
+        async function toggleRecording() {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+
+        // 连接WebSocket
+        function connect() {
+            console.log('Connecting to:', wsUrl);
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                console.log('Connected to WebSocket server');
+                isConnected = true;
+                document.getElementById('connectionStatus').className = 'status connected';
+                document.getElementById('connectionStatus').textContent = '已连接';
+                
+                // 发送hello消息
+                const helloMessage = JSON.stringify({
+                    type: "hello",
+                    version: 3,
+                    transport: "websocket",
+                    audio_params: {
+                        format: "opus",
+                        sample_rate: 16000,
+                        channels: 1,
+                        frame_duration: 60
+                    }
+                });
+                console.log('Sending hello message:', helloMessage);
+                ws.send(helloMessage);
+            };
+            
+            ws.onclose = function(event) {
+                console.log('WebSocket closed with code:', event.code, 'reason:', event.reason);
+                isConnected = false;
+                sessionId = null;
+                document.getElementById('connectionStatus').className = 'status disconnected';
+                document.getElementById('connectionStatus').textContent = '未连接';
+                
+                // 3秒后重连
+                setTimeout(connect, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                document.getElementById('connectionStatus').className = 'status error';
+                document.getElementById('connectionStatus').textContent = '错误';
+            };
+            
+            ws.onmessage = async function(event) {
+                try {
+                    if (event.data instanceof Blob) {
+                        // 处理音频数据
+                        queueAudio(event.data);
+                    } else {
+                        // 处理文本消息
+                        const data = JSON.parse(event.data);
+                        console.log('Received message:', data);
+                        
+                        if (data.type === 'hello') {
+                            sessionId = data.session_id;
+                            console.log('Session ID:', sessionId);
+                        }
+                        
+                        if (data.type === 'message') {
+                            appendMessage(data.role === 'assistant' ? 'server' : 'user', data.content);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error processing message:', e);
+                }
+            };
+        }
+        
+        function appendMessage(sender, message) {
+            const chatBox = document.getElementById('chatBox');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = sender === 'user' ? 'message user' : 'message server';
+            messageDiv.textContent = message;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message && ws && isConnected && sessionId) {
+                // 发送文本消息
+                const textMessage = JSON.stringify({
+                    type: "listen",
+                    state: "detect",
+                    text: message
+                });
+                ws.send(textMessage);
+                appendMessage('user', message);
+                input.value = '';
+            } else if (!sessionId) {
+                console.error('No session ID available');
+                appendMessage('server', '连接未就绪，请稍后再试');
+            }
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        // 添加音频到队列
+        function queueAudio(audioBlob) {
+            audioQueue.push(audioBlob);
+            if (!isPlaying) {
+                isPlaying = true;
+                playNextAudio();
             }
         }
 
@@ -227,170 +429,17 @@
             }
         }
 
-        // 添加音频到队列
-        function queueAudio(audioBlob) {
-            audioQueue.push(audioBlob);
-            if (!isPlaying) {
-                isPlaying = true;
-                playNextAudio();
-            }
-        }
-
-        // 连接WebSocket
-        function connect() {
-            console.log('Connecting to:', wsUrl);
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = function() {
-                console.log('Connected to WebSocket server');
-                isConnected = true;
-                document.getElementById('connectionStatus').className = 'status connected';
-                document.getElementById('connectionStatus').textContent = '已连接';
-                
-                // 发送hello消息
-                const helloMessage = JSON.stringify({
-                    type: "hello"
+        // 初始化音频上下文
+        function initAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000,  // 16kHz采样率
+                    latencyHint: 'interactive'
                 });
-                console.log('Sending hello message:', helloMessage);
-                ws.send(helloMessage);
-            };
-            
-            ws.onclose = function(event) {
-                console.log('WebSocket closed with code:', event.code, 'reason:', event.reason);
-                isConnected = false;
-                sessionId = null;
-                document.getElementById('connectionStatus').className = 'status disconnected';
-                document.getElementById('connectionStatus').textContent = '未连接';
-                
-                // 3秒后重连
-                setTimeout(connect, 3000);
-            };
-            
-            ws.onerror = function(error) {
-                console.error('WebSocket error:', error);
-                console.error('WebSocket readyState:', ws.readyState);
-                isConnected = false;
-                sessionId = null;
-                document.getElementById('connectionStatus').className = 'status error';
-                document.getElementById('connectionStatus').textContent = '连接错误';
-            };
-            
-            ws.onmessage = async function(event) {
-                try {
-                    if (event.data instanceof Blob) {
-                        queueAudio(event.data);
-                    } else {
-                        // 处理JSON消息
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'hello') {
-                            sessionId = data.session_id;
-                            console.log('Session initialized:', sessionId);
-                        } else if (data.type === 'stt') {
-                            appendMessage('server', `[识别结果] ${data.text}`);
-                        } else if (data.type === 'llm') {
-                            if (data.emotion) {
-                                appendMessage('server', data.text);
-                            }
-                        } else if (data.type === 'tts') {
-                            if (data.state === 'sentence_start' && data.text) {
-                                appendMessage('server', data.text);
-                            }
-                        } else {
-                            appendMessage('server', JSON.stringify(data));
-                        }
-                    }
-                } catch (e) {
-                    console.error('Message handling error:', e);
-                    if (!(event.data instanceof Blob)) {
-                        appendMessage('server', event.data);
-                    }
-                }
-            };
-        }
-        
-        function appendMessage(sender, message) {
-            const chatBox = document.getElementById('chatBox');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = sender === 'user' ? 'message user' : 'message server';
-            messageDiv.textContent = message;
-            chatBox.appendChild(messageDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-        
-        function sendMessage() {
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
-            
-            if (message && ws && isConnected && sessionId) {
-                // 发送文本消息
-                const textMessage = JSON.stringify({
-                    type: "listen",
-                    state: "detect",
-                    text: message
-                });
-                ws.send(textMessage);
-                appendMessage('user', message);
-                input.value = '';
-            } else if (!sessionId) {
-                console.error('No session ID available');
-                appendMessage('server', '连接未就绪，请稍后再试');
+                nextPlayTime = audioContext.currentTime;
             }
-        }
-        
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
-        
-        // 请求麦克风权限
-        async function setupRecording() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                
-                mediaRecorder.ondataavailable = function(event) {
-                    audioChunks.push(event.data);
-                };
-                
-                mediaRecorder.onstop = async function() {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    if (ws && isConnected) {
-                        ws.send(audioBlob);
-                    }
-                    audioChunks = [];
-                    document.getElementById('recordButton').textContent = '录音';
-                    isRecording = false;
-                };
-                
-                console.log('Recording setup complete');
-            } catch (e) {
-                console.error('Error setting up recording:', e);
-                alert('无法访问麦克风');
-            }
-        }
-
-        function toggleRecording() {
-            if (!mediaRecorder) {
-                setupRecording();
-                return;
-            }
-            
-            if (isRecording) {
-                mediaRecorder.stop();
-                document.getElementById('recordButton').textContent = '录音';
-            } else {
-                audioChunks = [];
-                mediaRecorder.start();
-                document.getElementById('recordButton').textContent = '停止';
-                isRecording = true;
-                
-                // 5秒后自动停止录音
-                setTimeout(() => {
-                    if (isRecording) {
-                        mediaRecorder.stop();
-                    }
-                }, 5000);
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
             }
         }
 
