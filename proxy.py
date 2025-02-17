@@ -123,10 +123,14 @@ class AudioProcessor:
 class WebSocketProxy:
     def __init__(self):
         self.device_id = get_mac_address()
-        self.headers = {
-            'Authorization': f'Bearer {TOKEN}',
-            'device-id': self.device_id
-        }
+        self.enable_token = os.getenv("ENABLE_TOKEN", "true").lower() == "true"
+        self.token = os.getenv("DEVICE_TOKEN", "123")
+        
+        # 根据 token 开关设置 headers
+        self.headers = {'device-id': self.device_id}
+        if self.enable_token:
+            self.headers['Authorization'] = f'Bearer {self.token}'
+            
         self.audio_processor = AudioProcessor(buffer_size=960)
         self.decoder = opuslib.Decoder(16000, 1)  # 创建一个持久的解码器实例
         self.audio_buffer = bytearray()  # 改用 bytearray 存储音频数据

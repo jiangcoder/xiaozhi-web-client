@@ -2,6 +2,14 @@
 
 这是小智的Web客户端实现，提供了语音对话功能。
 
+## 项目展示
+
+<div align="center">
+  <img src="img/1.jpg" alt="聊天界面" width="280" />
+  <img src="img/2.jpg" alt="设置面板" width="280" />
+  <img src="img/3.jpg" alt="语音通话" width="280" />
+</div>
+
 ## 功能特点
 
 - 实时语音对话

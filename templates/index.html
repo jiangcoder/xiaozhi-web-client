@@ -3,150 +3,139 @@
 <head>
     <title>小智聊天室</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f0f2f5;
-        }
-
-        .chat-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            padding: 20px;
-        }
-
-        h1 {
-            text-align: center;
-            color: #1a73e8;
-            margin-bottom: 20px;
-        }
-
-        .auth-info {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-
-        .status {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 12px;
-        }
-
-        .connected {
-            background: #34a853;
-            color: white;
-        }
-
-        .disconnected {
-            background: #ea4335;
-            color: white;
-        }
-
-        .error {
-            background: #fbbc05;
-            color: white;
-        }
-
-        .chat-box {
-            height: 400px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 20px;
-        }
-
-        .message {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 70%;
-            word-wrap: break-word;
-        }
-
-        .user {
-            background: #e3f2fd;
-            margin-left: auto;
-        }
-
-        .server {
-            background: #f5f5f5;
-            margin-right: auto;
-        }
-
-        .input-container {
-            display: flex;
-            gap: 10px;
-        }
-
-        input[type="text"] {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            outline: none;
-        }
-
-        button {
-            padding: 10px 20px;
-            background: #1a73e8;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        button:hover {
-            background: #1557b0;
-        }
-
-        #recordButton {
-            background: #34a853;
-        }
-
-        #recordButton:hover {
-            background: #2d8a47;
-        }
-
-        @media (max-width: 600px) {
-            body {
-                padding: 10px;
-            }
-
-            .chat-container {
-                padding: 10px;
-            }
-
-            .message {
-                max-width: 85%;
-            }
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="/static/styles.css" rel="stylesheet">
 </head>
-<body>
+<body class="bg-gray-100">
     <div class="chat-container">
-        <h1>小智聊天室</h1>
-        <div class="auth-info">
-            <div>设备ID: {{ device_id }}</div>
-            <div>Token: {{ token }}</div>
-            <div>状态: <span id="connectionStatus" class="status disconnected">未连接</span></div>
+        <div class="header">
+            <h1 class="text-2xl font-bold">小智聊天室</h1>
+            <button class="settings-btn" onclick="toggleSettings()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </button>
         </div>
+
+        <div class="p-4 bg-gray-50 border-b">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <span id="connectionStatus" class="status disconnected">未连接</span>
+                    <span class="text-sm text-gray-600">设备ID: {{ device_id }}</span>
+                </div>
+            </div>
+        </div>
+
         <div class="chat-box" id="chatBox"></div>
+
         <div class="input-container">
             <input type="text" id="messageInput" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
-            <button onclick="sendMessage()">发送</button>
-            <button id="recordButton">录音</button>
+            <button class="btn-primary" onclick="sendMessage()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clip-rule="evenodd" />
+                </svg>
+                <span>发送</span>
+            </button>
+            <button id="recordButton" class="btn-success">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="settings-panel" id="settingsPanel">
+        <h2 class="text-xl font-bold mb-4">设置</h2>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">远程服务器地址</label>
+                <input type="text" id="remoteServerUrl" class="w-full" value="{{ ws_url }}" placeholder="例如: ws://your-server:9005">
+                <p class="text-sm text-gray-500 mt-1">代理服务器连接的远程地址</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">本地代理地址</label>
+                <input type="text" class="w-full bg-gray-100" value="ws://localhost:5002" readonly>
+                <p class="text-sm text-gray-500 mt-1">前端固定连接本地代理地址</p>
+            </div>
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="block text-sm font-medium text-gray-700">Token 设置</label>
+                    <div class="flex items-center">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableToken" {% if enable_token %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="ml-2 text-sm font-medium text-gray-700" id="tokenStatus">
+                            {{ "已开启" if enable_token else "已关闭" }}
+                        </span>
+                    </div>
+                </div>
+                <input type="text" id="serverToken" class="w-full transition-all duration-200" 
+                    value="{{ token }}" {% if not enable_token %}disabled{% endif %}
+                    style="{% if not enable_token %}background-color: #f3f4f6; border-color: #e5e7eb;{% endif %}">
+                <p class="text-sm text-gray-500">开启后将在连接时携带 Token</p>
+            </div>
+            <div class="flex justify-end space-x-2 mt-4">
+                <button class="btn-primary" onclick="saveSettings()">保存配置</button>
+                <button class="btn-danger" onclick="toggleSettings()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="overlay" onclick="toggleSettings()"></div>
+
+    <div class="voice-call-mode" id="voiceCallMode">
+        <div class="voice-header">
+            <div class="voice-title">语音通话</div>
+            <div class="voice-status-text">正在通话中...</div>
+        </div>
+
+        <div class="voice-main">
+            <div class="voice-avatar-container">
+                <div class="voice-avatar">
+                    <div class="ripple-1"></div>
+                    <div class="ripple-2"></div>
+                    <div class="ripple-3"></div>
+                    <img src="https://api.dicebear.com/7.x/adventurer/svg?seed=Felix" alt="AI Assistant">
+                </div>
+            </div>
+
+            <div class="voice-wave-container">
+                <div class="voice-wave">
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                    <div class="wave-line"></div>
+                </div>
+            </div>
+
+            <div class="voice-info">
+                <div class="voice-name">小智</div>
+            </div>
+        </div>
+
+        <div class="voice-controls">
+            <button class="voice-btn mic" id="micButton">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+            </button>
+            <button class="voice-btn hangup" onclick="stopRecording()">
+                <svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+                    <path d="M151.04 658.944c44.544 0.512 149.504-19.456 190.464-60.416 9.728-9.728 15.872-19.968 17.92-31.232 7.168-32.768 13.312-58.88000001 20.992-66.56 4.096-4.096 12.288-5.12 31.232-6.144l3.072 0c51.71199999-3.584 63.488-3.072 85.504-3.07199999l16.384-1e-8c18.944 0.512 32.768 0.512 83.96800001 3.584l2.04799999 0c24.576 1.536 40.44800001 2.56 47.104 8.192 6.656 5.632 11.264 20.48 15.872 52.224 5.632 38.4 32.256 66.048 78.848 82.432 36.864 12.8 79.872 17.408 118.272 20.992l3.072 0.512c32.768 3.072 58.88-4.608 78.336-24.06400001 21.504-21.504 27.648-50.176 30.72-65.53599999 0.512-1.024 0.512-2.56 0.512-3.584 7.68-34.304 4.608-67.584-8.19200001-92.16-19.456-36.35199999-49.664-78.336-166.39999999-112.64-100.864-29.696-176.64-40.96-280.576-42.496-97.792-1.024-135.168 4.09600001-217.6 17.408-92.16 14.848-165.376 44.03199999-201.216 79.872C68.096 450.56 41.984 476.672 49.664 559.104c8.192 86.528 53.248 99.328 101.376 99.84z" fill="currentColor"></path>
+                </svg>
+            </button>
         </div>
     </div>
 
@@ -172,6 +161,9 @@
         const BUFFER_THRESHOLD = 3;     // 缓冲区阈值，当积累了这么多音频片段后开始播放
         let audioBufferQueue = [];      // 音频缓冲区队列
         let isAudioContextInitialized = false;
+        let lastUserAudioLevel = 0;
+        let lastAIAudioLevel = 0;
+        let animationCheckInterval = null;
 
         // 初始化音频处理器
         async function initAudioProcessor() {
@@ -187,17 +179,14 @@
         // 修改为点击切换通话状态
         function initRecordButton() {
             const button = document.getElementById('recordButton');
-            button.textContent = '开始通话';
             
             // 点击切换通话状态
             button.addEventListener('click', async () => {
                 if (!isRecording) {
                     await startRecording();
-                    button.textContent = '结束通话';
                     button.style.background = '#ea4335';
                 } else {
                     stopRecording();
-                    button.textContent = '开始通话';
                     button.style.background = '#34a853';
                 }
             });
@@ -206,6 +195,10 @@
         // 开始录音
         async function startRecording() {
             try {
+                // 显示通话界面
+                const voiceCallMode = document.getElementById('voiceCallMode');
+                voiceCallMode.classList.add('active');
+
                 // 先停止所有正在播放的音频
                 if (audioContext) {
                     await audioContext.close();
@@ -262,13 +255,16 @@
                 processorNode.port.onmessage = (e) => {
                     if (isRecording && ws && ws.readyState === WebSocket.OPEN) {
                         if (e.data instanceof Float32Array) {
-                            // 发送音频数据
+                            const audioLevel = detectAudioLevel(e.data);
+                            updateUserWaveAnimation(audioLevel);
                             ws.send(e.data.buffer);
-                            // 更新最后收到音频的时间
                             lastAudioTime = Date.now();
                         } else if (e.data.buffer) {
-                            ws.send(e.data.buffer);
-                            lastAudioTime = Date.now();
+                            const audioData = new Float32Array(e.data.buffer);
+                            const audioLevel = detectAudioLevel(audioData);
+                            updateUserWaveAnimation(audioLevel);
+                        ws.send(e.data.buffer);
+                        lastAudioTime = Date.now();
                         }
                     }
                 };
@@ -300,14 +296,21 @@
                     }
                 }, 100);
 
+                updateRecordButtonStyle(true);
+
             } catch (err) {
                 console.error('Error starting recording:', err);
+                updateRecordButtonStyle(false);
                 alert('无法访问麦克风');
             }
         }
 
         // 停止录音
         function stopRecording() {
+            // 隐藏通话界面
+            const voiceCallMode = document.getElementById('voiceCallMode');
+            voiceCallMode.classList.remove('active');
+
             if (silenceTimer) {
                 clearInterval(silenceTimer);
                 silenceTimer = null;
@@ -358,6 +361,17 @@
             }
             
             isRecording = false;
+            updateRecordButtonStyle(false);
+            showUserWaveAnimation(false);
+            showAIWaveAnimation(false);
+
+            if (animationCheckInterval) {
+                clearInterval(animationCheckInterval);
+                animationCheckInterval = null;
+            }
+            
+            updateUserWaveAnimation(0);
+            updateAIWaveAnimation(0);
         }
 
         // 连接WebSocket
@@ -407,7 +421,7 @@
             ws.onmessage = async function(event) {
                 try {
                     if (event.data instanceof Blob) {
-                        // 处理音频数据
+                        showAIWaveAnimation(true);
                         queueAudio(event.data);
                     } else {
                         // 处理文本消息
@@ -418,38 +432,37 @@
                             sessionId = data.session_id;
                             console.log('Session ID:', sessionId);
                         } else if (data.type === 'stt') {
-                            // 语音识别结果
-                            appendMessage('user', `[语音识别] ${data.text}`);
-                            // 新的语音识别开始，清除之前的回复 div
-                            currentResponseDiv = null;
-                        } else if (data.type === 'llm') {
-                            // AI 回复
-                            if (data.text && data.text !== '😊') {
-                                appendMessage('server', data.text);
+                            // 只有在录音状态且没有source字段时才显示语音识别结果
+                            if (data.text && data.text.trim() && isRecording && !data.source) {
+                                appendMessage('user', data.text);  // 直接显示文本，不加[语音识别]前缀
                             }
                         } else if (data.type === 'tts') {
-                            // TTS 状态消息
                             if (data.state === 'start') {
-                                // 开始新的回复，创建新的消息 div
-                                currentResponseDiv = null;
-                            } else if (data.text) {
-                                // 只要有文本就立即显示
+                                showAIWaveAnimation(true);
+                                // 创建新的回复消息
+                                if (data.text && data.text.trim()) {
+                                    currentResponseDiv = appendMessage('server', data.text);
+                                }
+                            } else if (data.state === 'sentence_start') {
+                                showAIWaveAnimation(true);
+                                // 如果是新的句子，且有文本内容
+                                if (data.text && data.text.trim()) {
                                 if (!currentResponseDiv) {
-                                    // 如果是新回复，创建新的消息 div
+                                        // 如果没有当前回复div，创建一个新的
                                     currentResponseDiv = appendMessage('server', data.text);
                                 } else {
-                                    // 如果是同一回复的后续内容，追加到现有 div
-                                    currentResponseDiv.textContent += ' ' + data.text;
+                                        // 如果已有回复div，追加内容
+                                        currentResponseDiv.innerHTML += ' ' + data.text;
+                                        // 滚动到底部
                                     const chatBox = document.getElementById('chatBox');
                                     chatBox.scrollTop = chatBox.scrollHeight;
+                                    }
                                 }
-                            } else if (data.state === 'stop') {
-                                // 回复结束，清除当前 div 引用
+                            } else if (data.state === 'end' || data.state === 'stop') {
+                                showAIWaveAnimation(false);
+                                // 结束当前回复
                                 currentResponseDiv = null;
                             }
-                        } else if (data.type === 'message') {
-                            // 普通消息
-                            appendMessage(data.role === 'assistant' ? 'server' : 'user', data.content);
                         }
                     }
                 } catch (e) {
@@ -458,14 +471,39 @@
             };
         }
         
-        function appendMessage(sender, message) {
+        // 添加消息到聊天框
+        function appendMessage(type, text) {
             const chatBox = document.getElementById('chatBox');
             const messageDiv = document.createElement('div');
-            messageDiv.className = sender === 'user' ? 'message user' : 'message server';
-            messageDiv.textContent = message;
+            messageDiv.className = `message ${type}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // 处理消息内容，支持换行
+            const formattedMessage = text.replace(/\n/g, '<br>');
+            contentDiv.innerHTML = formattedMessage;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            const now = new Date();
+            timeDiv.textContent = now.toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit'
+            });
+            
+            messageDiv.appendChild(contentDiv);
+            messageDiv.appendChild(timeDiv);
             chatBox.appendChild(messageDiv);
+            
+            // 滚动到底部
             chatBox.scrollTop = chatBox.scrollHeight;
-            return messageDiv;  // 返回创建的消息 div
+            
+            // 如果是服务器消息，返回内容div以支持追加内容
+            if (type === 'server') {
+                return contentDiv;
+            }
+            return messageDiv;
         }
         
         function sendMessage() {
@@ -477,9 +515,11 @@
                 const textMessage = JSON.stringify({
                     type: "listen",
                     state: "detect",
-                    text: message
+                    text: message,
+                    source: "text"  // 标记这是文本消息
                 });
                 ws.send(textMessage);
+                // 直接显示用户消息，不等待 stt 回复
                 appendMessage('user', message);
                 input.value = '';
             } else if (!sessionId) {
@@ -522,6 +562,7 @@
         async function playNextAudio() {
             if (audioQueue.length === 0) {
                 isPlaying = false;
+                updateAIWaveAnimation(0); // 没有音频时停止动画
                 return;
             }
             
@@ -541,40 +582,64 @@
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
 
-                // 创建增益节点来控制音量和淡入淡出
+                // 创建分析器节点
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Float32Array(bufferLength);
+
+                // 创建增益节点
                 const gainNode = audioContext.createGain();
-                source.connect(gainNode);
+                source.connect(analyser);
+                analyser.connect(gainNode);
                 gainNode.connect(audioContext.destination);
+                
+                // 设置音频分析定时器
+                if (animationCheckInterval) {
+                    clearInterval(animationCheckInterval);
+                }
+                
+                animationCheckInterval = setInterval(() => {
+                    analyser.getFloatTimeDomainData(dataArray);
+                    const audioLevel = detectAudioLevel(dataArray);
+                    updateAIWaveAnimation(audioLevel);
+                }, 50);
                 
                 // 确保音频片段之间无间隙
                 const currentTime = audioContext.currentTime;
                 const startTime = Math.max(currentTime, nextPlayTime);
                 
                 // 添加淡入淡出效果
-                const fadeDuration = 0.005; // 5ms的淡入淡出
+                const fadeDuration = 0.005;
                 gainNode.gain.setValueAtTime(0, startTime);
                 gainNode.gain.linearRampToValueAtTime(1, startTime + fadeDuration);
                 gainNode.gain.setValueAtTime(1, startTime + audioBuffer.duration - fadeDuration);
                 gainNode.gain.linearRampToValueAtTime(0, startTime + audioBuffer.duration);
                 
                 source.start(startTime);
-                nextPlayTime = startTime + audioBuffer.duration + 0.05; // 添加50ms的间隔
+                nextPlayTime = startTime + audioBuffer.duration + 0.05;
                 
-                // 在音频播放完成后清理
-                source.onended = () => {
+                    source.onended = () => {
                     source.disconnect();
                     gainNode.disconnect();
+                    analyser.disconnect();
                     
-                    // 如果队列中还有数据，继续播放
-                    if (audioQueue.length > 0) {
-                        setTimeout(() => playNextAudio(), 50);
-                    } else {
-                        isPlaying = false;
+                    if (animationCheckInterval) {
+                        clearInterval(animationCheckInterval);
+                        animationCheckInterval = null;
                     }
-                };
+                    
+                            if (audioQueue.length > 0) {
+                        setTimeout(() => playNextAudio(), 50);
+                            } else {
+                                isPlaying = false;
+                        updateAIWaveAnimation(0);
+                            }
+                    };
             } catch (e) {
                 console.error('Audio playback error:', e);
                 isPlaying = false;
+                updateAIWaveAnimation(0);
                 if (audioQueue.length > 0) {
                     setTimeout(() => playNextAudio(), 100);
                 }
@@ -593,6 +658,145 @@
             connect();
             initRecordButton();
         };
+
+        // 添加设置面板相关功能
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            const overlay = document.getElementById('overlay');
+            panel.classList.toggle('active');
+            overlay.classList.toggle('active');
+        }
+
+        function saveSettings() {
+            const newRemoteUrl = document.getElementById('remoteServerUrl').value.trim();
+            const enableToken = document.getElementById('enableToken').checked;
+            const token = document.getElementById('serverToken').value.trim();
+            
+            if (newRemoteUrl) {
+                fetch('/save_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ws_url: newRemoteUrl,
+                        enable_token: enableToken,
+                        token: enableToken ? token : ''
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message || '配置已保存');
+                        if (ws) {
+                            ws.close();
+                            setTimeout(connect, 1000);
+                        }
+                    } else {
+                        alert('保存配置失败：' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving config:', error);
+                    alert('保存配置失败，请检查网络连接');
+                });
+            }
+            toggleSettings();
+        }
+
+        // 添加 Token 开关事件监听
+        document.getElementById('enableToken').addEventListener('change', function(e) {
+            const tokenInput = document.getElementById('serverToken');
+            const statusText = document.getElementById('tokenStatus');
+            tokenInput.disabled = !e.target.checked;
+            
+            if (!e.target.checked) {
+                tokenInput.style.backgroundColor = '#f3f4f6';
+                tokenInput.style.borderColor = '#e5e7eb';
+                statusText.textContent = '已关闭';
+                statusText.style.color = '#374151';
+            } else {
+                tokenInput.style.backgroundColor = '';
+                tokenInput.style.borderColor = '';
+                statusText.textContent = '已开启';
+                statusText.style.color = '#34c759';
+            }
+        });
+
+        // 修改录音按钮样式
+        function updateRecordButtonStyle(isRecording) {
+            const button = document.getElementById('recordButton');
+            if (isRecording) {
+                button.style.background = '#ea4335';
+            } else {
+                button.style.background = '#34a853';
+            }
+        }
+
+        // 添加音频波形动画控制
+        function showAIWaveAnimation(show) {
+            const wave = document.querySelector('.voice-wave');
+            if (show) {
+                wave.classList.add('active');
+            } else {
+                wave.classList.remove('active');
+            }
+        }
+
+        function showUserWaveAnimation(show) {
+            const wave = document.querySelector('.voice-wave');
+            if (show) {
+                wave.classList.add('active');
+            } else {
+                wave.classList.remove('active');
+            }
+        }
+
+        // 添加音频电平检测
+        function detectAudioLevel(audioData) {
+            if (!audioData || !audioData.length) return 0;
+            let sum = 0;
+            for (let i = 0; i < audioData.length; i++) {
+                sum += Math.abs(audioData[i]);
+            }
+            return sum / audioData.length;
+        }
+
+        // 更新用户说话时的波形显示
+        function updateUserWaveAnimation(audioLevel) {
+            const threshold = 0.01;
+            const maxHeight = 24; // 最大高度
+            const minHeight = 2;  // 最小高度
+            
+            if (audioLevel > threshold) {
+                const height = Math.min(maxHeight, minHeight + (audioLevel * 100));
+                document.documentElement.style.setProperty('--wave-height', `${height}px`);
+                showUserWaveAnimation(true);
+            } else {
+                showUserWaveAnimation(false);
+            }
+        }
+
+        // 更新AI说话时的头像动画
+        function updateAIWaveAnimation(audioLevel) {
+            const threshold = 0.01;
+            const avatar = document.querySelector('.voice-avatar');
+            const maxScale = 1.05;
+            
+            if (audioLevel > threshold) {
+                // 根据音频电平计算缩放值
+                const scale = 1 + (Math.min(audioLevel * 2, 0.05)); // 最大缩放到1.05
+                avatar.style.transform = `scale(${scale})`;
+                avatar.classList.add('speaking');
+            } else {
+                avatar.style.transform = 'scale(1)';
+                // 注意这里不移除speaking类，让涟漪动画继续
+                // 只有在完全停止说话时才移除
+                if (audioLevel === 0) {
+                    avatar.classList.remove('speaking');
+                }
+            }
+        }
     </script>
 </body>
 </html> 

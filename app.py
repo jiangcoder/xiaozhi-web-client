@@ -1,7 +1,7 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import os
 import uuid
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key, find_dotenv
 import websockets
 import asyncio
 import json
@@ -11,7 +11,28 @@ import atexit
 import socket
 from proxy import WebSocketProxy  # 导入 proxy.py 中的 WebSocketProxy 类
 
-load_dotenv()
+# 默认配置
+DEFAULT_CONFIG = {
+    'WS_URL': 'ws://localhost:9005',
+    'DEVICE_TOKEN': '123',
+    'WEB_PORT': '5001',
+    'PROXY_PORT': '5002',
+    'ENABLE_TOKEN': 'true'  # 新增token开关配置
+}
+
+def ensure_env_file():
+    """确保.env文件存在，如果不存在则创建默认配置"""
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    if not os.path.exists(env_path):
+        print("未找到.env文件，创建默认配置...")
+        with open(env_path, 'w') as f:
+            for key, value in DEFAULT_CONFIG.items():
+                f.write(f"{key}={value}\n")
+    return env_path
+
+# 确保.env文件存在并加载配置
+env_path = ensure_env_file()
+load_dotenv(env_path)
 
 app = Flask(__name__, static_url_path='/static')
 
@@ -30,19 +51,17 @@ def get_local_ip():
         return '0.0.0.0'
 
 # 配置
-WS_URL = os.getenv("WS_URL")
+WS_URL = os.getenv("WS_URL", DEFAULT_CONFIG['WS_URL'])
 if not WS_URL:
     print("警告: 未设置WS_URL环境变量，请检查.env文件")
     WS_URL = "ws://localhost:9005"  # 默认值改为localhost
 
 LOCAL_IP = get_local_ip()
-WEB_PORT = int(os.getenv("WEB_PORT", "5001"))
-PROXY_PORT = int(os.getenv("PROXY_PORT", "5002"))
+WEB_PORT = int(os.getenv("WEB_PORT", DEFAULT_CONFIG['WEB_PORT']))
+PROXY_PORT = int(os.getenv("PROXY_PORT", DEFAULT_CONFIG['PROXY_PORT']))
 PROXY_URL = f"ws://{LOCAL_IP}:{PROXY_PORT}"
-TOKEN = os.getenv("DEVICE_TOKEN")
-if not TOKEN:
-    print("警告: 未设置DEVICE_TOKEN环境变量，请检查.env文件")
-    TOKEN = "123"  # 默认值
+TOKEN = os.getenv("DEVICE_TOKEN", DEFAULT_CONFIG['DEVICE_TOKEN'])
+ENABLE_TOKEN = os.getenv("ENABLE_TOKEN", DEFAULT_CONFIG['ENABLE_TOKEN']).lower() == 'true'
 
 proxy_process = None
 
@@ -62,9 +81,11 @@ async def test_websocket_connection():
 
 @app.route('/')
 def index():
-    device_id = get_mac_address()
-    ws_url = PROXY_URL  # 使用本机IP地址
-    return render_template('index.html', device_id=device_id, token=TOKEN, ws_url=ws_url)
+    return render_template('index.html', 
+                         device_id=get_mac_address(),
+                         token=TOKEN,
+                         enable_token=ENABLE_TOKEN,
+                         ws_url=f"ws://localhost:5002")
 
 @app.route('/test_connection', methods=['GET'])
 def test_connection():
@@ -88,6 +109,40 @@ def test_connection():
             
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/save_config', methods=['POST'])
+def save_config():
+    try:
+        global proxy_process
+        data = request.get_json()
+        new_ws_url = data.get('ws_url')
+        new_token = data.get('token')
+        enable_token = data.get('enable_token', False)
+        
+        if not new_ws_url:
+            return jsonify({'success': False, 'error': '服务器地址不能为空'})
+        
+        # 更新.env文件
+        dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+        set_key(dotenv_path, 'WS_URL', new_ws_url)
+        set_key(dotenv_path, 'DEVICE_TOKEN', new_token if new_token else '')
+        set_key(dotenv_path, 'ENABLE_TOKEN', str(enable_token).lower())
+        
+        # 重新加载环境变量
+        load_dotenv()
+        
+        # 重启代理进程
+        if proxy_process:
+            proxy_process.terminate()
+            proxy_process.join()
+        
+        proxy_process = multiprocessing.Process(target=run_proxy)
+        proxy_process.start()
+        print(f"Proxy server restarted with new config: WS_URL={new_ws_url}, TOKEN_ENABLED={enable_token}")
+        
+        return jsonify({'success': True, 'message': '配置已保存并重启代理服务器'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 def cleanup():
     """清理进程"""
