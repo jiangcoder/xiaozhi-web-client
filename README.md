@@ -14,21 +14,46 @@
 
 ## 快速开始
 
-### 方式一：直接运行
+### 方式一：源码运行
+
+1. 配置环境变量：
+
+从 `.env.example` 创建 `.env` 文件并设置：
+
+```
+cp .env.example .env
+```
+
+示例：
+
+如果你使用[xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server)
+
+```
+# WebSocket服务器地址
+WS_URL=ws://your_server_address:8000/xiaozhi/v1/
+
+# 设备认证令牌
+DEVICE_TOKEN=your_token
+
+# Web服务器配置
+WEB_PORT=5001
+PROXY_PORT=5002
+```
+
+#### （推荐）poetry：虚拟环境
+
+```sh
+poetry install
+poetry run python app.py
+```
+
+#### 直接运行
 
 1. 安装依赖：
 ```bash
 pip install -r requirements.txt
 ```
 
-2. 配置环境变量：
-创建 `.env` 文件并设置：
-```
-WS_URL=ws://your_server_address:9005
-DEVICE_TOKEN=your_token
-WEB_PORT=5001
-PROXY_PORT=5002
-```
 
 3. 启动服务：
 ```bash
