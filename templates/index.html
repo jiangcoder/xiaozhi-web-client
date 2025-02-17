@@ -206,6 +206,15 @@
         // 开始录音
         async function startRecording() {
             try {
+                // 先停止所有正在播放的音频
+                if (audioContext) {
+                    await audioContext.close();
+                    audioContext = null;
+                    audioQueue = [];
+                    isPlaying = false;
+                    nextPlayTime = 0;
+                }
+                
                 await initAudioProcessor();
                 
                 // 如果已经有流，先停止它
@@ -213,7 +222,27 @@
                     audioStream.getTracks().forEach(track => track.stop());
                 }
                 
-                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // 添加错误提示
+                try {
+                    audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true
+                        }
+                    });
+                } catch (err) {
+                    if (err.name === 'NotAllowedError') {
+                        alert('请允许访问麦克风。如果在非 HTTPS 环境，请使用 localhost 或配置 HTTPS。');
+                    } else if (err.name === 'NotFoundError') {
+                        alert('未找到麦克风设备，请检查设备连接。');
+                    } else {
+                        alert(`麦克风访问错误: ${err.message}`);
+                    }
+                    throw err;
+                }
+                
                 const source = audioContext.createMediaStreamSource(audioStream);
                 
                 // 如果已经有处理节点，先断开连接并重置
@@ -232,10 +261,15 @@
                 // 处理音频数据
                 processorNode.port.onmessage = (e) => {
                     if (isRecording && ws && ws.readyState === WebSocket.OPEN) {
-                        // 发送音频数据
-                        ws.send(e.data.buffer);
-                        // 更新最后收到音频的时间
-                        lastAudioTime = Date.now();
+                        if (e.data instanceof Float32Array) {
+                            // 发送音频数据
+                            ws.send(e.data.buffer);
+                            // 更新最后收到音频的时间
+                            lastAudioTime = Date.now();
+                        } else if (e.data.buffer) {
+                            ws.send(e.data.buffer);
+                            lastAudioTime = Date.now();
+                        }
                     }
                 };
 
@@ -299,6 +333,28 @@
                 processorNode.port.postMessage({ type: 'reset' });
                 processorNode.disconnect();
                 processorNode = null;
+            }
+            
+            // 等待当前音频播放完成
+            if (audioContext) {
+                const currentTime = audioContext.currentTime;
+                if (nextPlayTime > currentTime) {
+                    setTimeout(() => {
+                        if (audioContext) {
+                            audioContext.close();
+                            audioContext = null;
+                        }
+                        audioQueue = [];
+                        isPlaying = false;
+                        nextPlayTime = 0;
+                    }, (nextPlayTime - currentTime) * 1000);
+                } else {
+                    audioContext.close();
+                    audioContext = null;
+                    audioQueue = [];
+                    isPlaying = false;
+                    nextPlayTime = 0;
+                }
             }
             
             isRecording = false;
@@ -502,23 +558,20 @@
                 gainNode.gain.linearRampToValueAtTime(0, startTime + audioBuffer.duration);
                 
                 source.start(startTime);
-                nextPlayTime = startTime + audioBuffer.duration;
+                nextPlayTime = startTime + audioBuffer.duration + 0.05; // 添加50ms的间隔
                 
-                // 如果队列中还有数据，使用 setTimeout 来安排下一次播放
-                if (audioQueue.length > 0) {
-                    const timeUntilNextPlay = (startTime - currentTime) * 1000;
-                    setTimeout(() => playNextAudio(), Math.max(0, timeUntilNextPlay));
-                } else {
-                    source.onended = () => {
-                        setTimeout(() => {
-                            if (audioQueue.length > 0) {
-                                playNextAudio();
-                            } else {
-                                isPlaying = false;
-                            }
-                        }, 50); // 50ms的缓冲时间
-                    };
-                }
+                // 在音频播放完成后清理
+                source.onended = () => {
+                    source.disconnect();
+                    gainNode.disconnect();
+                    
+                    // 如果队列中还有数据，继续播放
+                    if (audioQueue.length > 0) {
+                        setTimeout(() => playNextAudio(), 50);
+                    } else {
+                        isPlaying = false;
+                    }
+                };
             } catch (e) {
                 console.error('Audio playback error:', e);
                 isPlaying = false;
