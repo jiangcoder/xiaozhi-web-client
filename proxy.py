@@ -10,6 +10,7 @@ import io
 import numpy as np
 from scipy import signal
 import soundfile as sf
+from urllib.parse import urlparse
 
 load_dotenv()
 
@@ -24,7 +25,16 @@ if not TOKEN:
     print("警告: 未设置DEVICE_TOKEN环境变量，请检查.env文件")
     TOKEN = "123"  # 默认值
 
-PROXY_PORT = int(os.getenv("PROXY_PORT", "5002"))
+LOCAL_PROXY_URL = os.getenv("LOCAL_PROXY_URL", "ws://localhost:5002")
+try:
+    # 从LOCAL_PROXY_URL中提取主机和端口
+    parsed_url = urlparse(LOCAL_PROXY_URL)
+    PROXY_HOST = parsed_url.hostname or 'localhost'
+    PROXY_PORT = parsed_url.port or 5002
+except Exception as e:
+    print(f"解析LOCAL_PROXY_URL失败: {e}，使用默认值")
+    PROXY_HOST = 'localhost'
+    PROXY_PORT = 5002
 
 def get_mac_address():
     mac = uuid.getnode()
@@ -314,14 +324,13 @@ class WebSocketProxy:
 
     async def main(self):
         """启动代理服务器"""
-        print(f"Starting proxy server...")
+        print(f"Starting proxy server on {PROXY_HOST}:{PROXY_PORT}")
         print(f"Device ID: {self.device_id}")
         print(f"Token: {TOKEN}")
         print(f"Target WS URL: {WS_URL}")
         
-        server = await websockets.serve(self.proxy_handler, "0.0.0.0", PROXY_PORT)
-        print(f"Proxy server is listening on ws://0.0.0.0:{PROXY_PORT}")
-        await asyncio.Future()  # 运行forever
+        async with websockets.serve(self.proxy_handler, PROXY_HOST, PROXY_PORT):
+            await asyncio.Future()  # 运行直到被取消
 
 if __name__ == "__main__":
     proxy = WebSocketProxy()

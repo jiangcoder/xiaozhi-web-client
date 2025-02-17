@@ -17,7 +17,8 @@ DEFAULT_CONFIG = {
     'DEVICE_TOKEN': '123',
     'WEB_PORT': '5001',
     'PROXY_PORT': '5002',
-    'ENABLE_TOKEN': 'true'  # 新增token开关配置
+    'ENABLE_TOKEN': 'true',  # 新增token开关配置
+    'LOCAL_PROXY_URL': 'ws://localhost:5002'  # 新增本地代理地址配置
 }
 
 def ensure_env_file():
@@ -85,7 +86,8 @@ def index():
                          device_id=get_mac_address(),
                          token=TOKEN,
                          enable_token=ENABLE_TOKEN,
-                         ws_url=f"ws://localhost:5002")
+                         ws_url=WS_URL,
+                         local_proxy_url=os.getenv("LOCAL_PROXY_URL", DEFAULT_CONFIG['LOCAL_PROXY_URL']))
 
 @app.route('/test_connection', methods=['GET'])
 def test_connection():
@@ -116,15 +118,17 @@ def save_config():
         global proxy_process
         data = request.get_json()
         new_ws_url = data.get('ws_url')
+        new_local_proxy_url = data.get('local_proxy_url')
         new_token = data.get('token')
         enable_token = data.get('enable_token', False)
         
-        if not new_ws_url:
-            return jsonify({'success': False, 'error': '服务器地址不能为空'})
+        if not new_ws_url or not new_local_proxy_url:
+            return jsonify({'success': False, 'error': '服务器地址和本地代理地址不能为空'})
         
         # 更新.env文件
         dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
         set_key(dotenv_path, 'WS_URL', new_ws_url)
+        set_key(dotenv_path, 'LOCAL_PROXY_URL', new_local_proxy_url)
         set_key(dotenv_path, 'DEVICE_TOKEN', new_token if new_token else '')
         set_key(dotenv_path, 'ENABLE_TOKEN', str(enable_token).lower())
         

@@ -56,8 +56,8 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">本地代理地址</label>
-                <input type="text" class="w-full bg-gray-100" value="ws://localhost:5002" readonly>
-                <p class="text-sm text-gray-500 mt-1">前端固定连接本地代理地址</p>
+                <input type="text" id="localProxyUrl" class="w-full" value="{{ local_proxy_url }}" placeholder="例如: ws://localhost:5002">
+                <p class="text-sm text-gray-500 mt-1">前端连接本地代理地址</p>
             </div>
             <div class="space-y-2">
                 <div class="flex items-center justify-between">
@@ -153,7 +153,7 @@
         let audioProcessor = null;
         let audioStream = null;
         let processorNode = null;
-        const wsUrl = "{{ ws_url }}";
+        const wsUrl = "{{ local_proxy_url }}";  // 使用配置的本地代理地址
         let silenceTimer = null;
         const SILENCE_TIMEOUT = 1000; // 1秒没有声音就自动停止
         let lastAudioTime = 0;
@@ -669,10 +669,11 @@
 
         function saveSettings() {
             const newRemoteUrl = document.getElementById('remoteServerUrl').value.trim();
+            const newLocalProxyUrl = document.getElementById('localProxyUrl').value.trim();
             const enableToken = document.getElementById('enableToken').checked;
             const token = document.getElementById('serverToken').value.trim();
             
-            if (newRemoteUrl) {
+            if (newRemoteUrl && newLocalProxyUrl) {
                 fetch('/save_config', {
                     method: 'POST',
                     headers: {
@@ -680,6 +681,7 @@
                     },
                     body: JSON.stringify({
                         ws_url: newRemoteUrl,
+                        local_proxy_url: newLocalProxyUrl,
                         enable_token: enableToken,
                         token: enableToken ? token : ''
                     })
