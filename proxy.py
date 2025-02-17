@@ -29,11 +29,11 @@ LOCAL_PROXY_URL = os.getenv("LOCAL_PROXY_URL", "ws://localhost:5002")
 try:
     # 从LOCAL_PROXY_URL中提取主机和端口
     parsed_url = urlparse(LOCAL_PROXY_URL)
-    PROXY_HOST = parsed_url.hostname or 'localhost'
+    PROXY_HOST = '0.0.0.0'  # 总是监听在所有网络接口上
     PROXY_PORT = parsed_url.port or 5002
 except Exception as e:
     print(f"解析LOCAL_PROXY_URL失败: {e}，使用默认值")
-    PROXY_HOST = 'localhost'
+    PROXY_HOST = '0.0.0.0'
     PROXY_PORT = 5002
 
 def get_mac_address():
