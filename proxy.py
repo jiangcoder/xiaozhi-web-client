@@ -4,13 +4,23 @@ import os
 import json
 from dotenv import load_dotenv
 import uuid
-import opuslib
 import wave
 import io
 import numpy as np
 from scipy import signal
 import soundfile as sf
 from urllib.parse import urlparse
+from system_info import setup_opus 
+import sys
+
+# 在导入 opuslib 之前处理 opus 动态库
+setup_opus()
+try:
+    import opuslib
+except Exception as e:
+    print(f"导入 opuslib 失败: {e}")
+    print("请确保 opus 动态库已正确安装或位于正确的位置")
+    sys.exit(1)
 
 load_dotenv()
 
