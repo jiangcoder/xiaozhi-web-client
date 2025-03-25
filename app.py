@@ -133,7 +133,7 @@ def save_config():
         set_key(dotenv_path, 'ENABLE_TOKEN', str(enable_token).lower())
         
         # 重新加载环境变量
-        load_dotenv()
+        load_dotenv(env_path, override=True)
         
         # 重启代理进程
         if proxy_process:
