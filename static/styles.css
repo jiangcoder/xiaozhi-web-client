@@ -87,6 +87,8 @@ body {
     word-break: break-word;
     line-height: 1.5;
     font-size: 0.95rem;
+    width: max-content;
+    max-width: 85%;
 }
 
 .message-time {
