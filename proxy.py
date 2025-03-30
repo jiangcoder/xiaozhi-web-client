@@ -50,6 +50,16 @@ def get_mac_address():
     mac = uuid.getnode()
     return ':'.join(['{:02x}'.format((mac >> elements) & 0xff) for elements in range(0,8*6,8)][::-1])
 
+CLIENT_ID = os.getenv("CLIENT_ID", "")
+def get_client_id():
+    if not CLIENT_ID:
+        new_client_id = str(uuid.uuid4())
+        with open(".env", "a") as env_file:
+            env_file.write(f"CLIENT_ID={new_client_id}\n")
+        os.environ["CLIENT_ID"] = new_client_id
+        return new_client_id
+    return CLIENT_ID
+
 def pcm_to_opus(pcm_data):
     """将PCM音频数据转换为Opus格式"""
     try:
@@ -143,13 +153,18 @@ class AudioProcessor:
 class WebSocketProxy:
     def __init__(self):
         self.device_id = get_mac_address()
+        self.client_id = get_client_id()
         self.enable_token = os.getenv("ENABLE_TOKEN", "true").lower() == "true"
         self.token = os.getenv("DEVICE_TOKEN", "123")
         
         # 根据 token 开关设置 headers
-        self.headers = {'device-id': self.device_id}
+        self.headers = {
+            "Device-Id": self.device_id,
+            "Client-Id": self.client_id,
+            "Protocol-Version": "1",
+        }
         if self.enable_token:
-            self.headers['Authorization'] = f'Bearer {self.token}'
+            self.headers["Authorization"] = f"Bearer {self.token}"
             
         self.audio_processor = AudioProcessor(buffer_size=960)
         self.decoder = opuslib.Decoder(16000, 1)  # 创建一个持久的解码器实例
