@@ -119,10 +119,10 @@ def opus_to_wav(opus_data):
 
 
 class AudioProcessor:
-    def __init__(self, buffer_size=960):
+    def __init__(self, buffer_size=480):
         self.buffer_size = buffer_size
         self.buffer = np.array([], dtype=np.float32)
-        self.sample_rate = 16000
+        self.sample_rate = 8000
 
     def reset_buffer(self):
         self.buffer = np.array([], dtype=np.float32)
@@ -172,8 +172,8 @@ class WebSocketProxy:
         if self.enable_token:
             self.headers["Authorization"] = f"Bearer {self.token}"
 
-        self.audio_processor = AudioProcessor(buffer_size=960)
-        self.decoder = opuslib.Decoder(16000, 1)  # 创建一个持久的解码器实例
+        self.audio_processor = AudioProcessor(buffer_size=480)
+        self.decoder = opuslib.Decoder(8000, 1)  # 创建一个持久的解码器实例
         self.audio_buffer = bytearray()  # 改用 bytearray 存储音频数据
         self.is_first_audio = True
         self.total_samples = 0  # 跟踪总采样数
@@ -181,26 +181,26 @@ class WebSocketProxy:
     def create_wav_header(self, total_samples):
         """创建WAV文件头"""
         header = bytearray(44)  # WAV header is 44 bytes
-
+    
         # RIFF header
         header[0:4] = b'RIFF'
         header[4:8] = (total_samples * 2 + 36).to_bytes(4, 'little')  # File size
         header[8:12] = b'WAVE'
-
+    
         # fmt chunk
         header[12:16] = b'fmt '
         header[16:20] = (16).to_bytes(4, 'little')  # Chunk size
         header[20:22] = (1).to_bytes(2, 'little')  # Audio format (PCM)
         header[22:24] = (1).to_bytes(2, 'little')  # Num channels
-        header[24:28] = (16000).to_bytes(4, 'little')  # Sample rate
-        header[28:32] = (32000).to_bytes(4, 'little')  # Byte rate
+        header[24:28] = (8000).to_bytes(4, 'little')  # Sample rate 修改为8000
+        header[28:32] = (16000).to_bytes(4, 'little')  # Byte rate 修改为8000*2=16000
         header[32:34] = (2).to_bytes(2, 'little')  # Block align
         header[34:36] = (16).to_bytes(2, 'little')  # Bits per sample
-
+    
         # data chunk
         header[36:40] = b'data'
         header[40:44] = (total_samples * 2).to_bytes(4, 'little')  # Data size
-
+    
         return header
 
     async def proxy_handler(self, websocket):
@@ -238,6 +238,7 @@ class WebSocketProxy:
                         msg_data = json.loads(message)
                         if msg_data.get('type') == 'tts' and msg_data.get('state') == 'start':
                             # 新的音频流开始，重置状态
+                            print("处理服务器音频数据-新的音频流开始，重置状态")
                             if len(self.audio_buffer) > 44:  # 如果还有未播放的数据，先发送
                                 size_bytes = (self.total_samples * 2 + 36).to_bytes(4, 'little')
                                 data_bytes = (self.total_samples * 2).to_bytes(4, 'little')
@@ -253,6 +254,7 @@ class WebSocketProxy:
 
                         elif msg_data.get('type') == 'tts' and msg_data.get('state') == 'stop':
                             # 音频流结束，发送剩余数据
+                            print("处理服务器音频数据-新的音频流开始，音频流结束，发送剩余数据")
                             if len(self.audio_buffer) > 44:  # 确保有音频数据
                                 # 更新最终的WAV头
                                 size_bytes = (self.total_samples * 2 + 36).to_bytes(4, 'little')
@@ -275,8 +277,9 @@ class WebSocketProxy:
                         await client_ws.send(message)
                 else:
                     try:
-                        # 解码Opus数据
-                        pcm_data = self.decoder.decode(message, 960)
+                        # 直接处理PCM数据，不需要解码Opus
+                        print("处理服务器音频数据-pcm")
+                        pcm_data = message  # 直接使用PCM数据
                         if pcm_data:
                             # 计算采样数
                             samples = len(pcm_data) // 2  # 16位音频，每个采样2字节
@@ -291,7 +294,7 @@ class WebSocketProxy:
                             self.audio_buffer.extend(pcm_data)
 
                             # 当缓冲区达到一定大小时发送数据
-                            if len(self.audio_buffer) >= 32044:  # WAV头(44字节) + 16000个采样(32000字节)
+                            if len(self.audio_buffer) >= 16044:  # WAV头(44字节) + 8000个采样(16000字节)
                                 # 更新WAV头中的数据大小
                                 size_bytes = (self.total_samples * 2 + 36).to_bytes(4, 'little')
                                 data_bytes = (self.total_samples * 2).to_bytes(4, 'little')
@@ -332,7 +335,7 @@ class WebSocketProxy:
                     except json.JSONDecodeError:
                         await server_ws.send(message)
                 else:
-                    print("处理客户端音频数据")
+                    #print("处理客户端音频数据")
                     try:
                         # 确保数据是 Float32Array 格式
                         audio_data = np.frombuffer(message, dtype=np.float32)
