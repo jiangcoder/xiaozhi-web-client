@@ -819,62 +819,43 @@
                 const audioBlob = audioQueue.shift();
                 const arrayBuffer = await audioBlob.arrayBuffer();
                 
-                // 检查WAV头
-                const view = new DataView(arrayBuffer);
-                const magic = String.fromCharCode(...new Uint8Array(arrayBuffer.slice(0, 4)));
-                if (magic !== 'RIFF') {
-                    throw new Error('Invalid WAV format');
+                // 直接处理PCM数据，不检查WAV头
+                const pcmData = new Int16Array(arrayBuffer);
+                const audioData = new Float32Array(pcmData.length);
+                
+                // 将16位PCM数据转换为Float32Array
+                for (let i = 0; i < pcmData.length; i++) {
+                    // 归一化到[-1,1]范围
+                    audioData[i] = pcmData[i] / 32768.0;
                 }
                 
-                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                // 创建音频缓冲区
+                const audioBuffer = audioContext.createBuffer(1, audioData.length, 8000); // 单声道，8kHz采样率
+                audioBuffer.getChannelData(0).set(audioData);
+                
+                // 创建音频源并播放
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
-
-                // 创建增益节点来控制音量和淡入淡出
-                const gainNode = audioContext.createGain();
-                source.connect(gainNode);
-                gainNode.connect(audioContext.destination);
+                source.connect(audioContext.destination);
                 
-                // 确保音频片段之间无间隙
-                const currentTime = audioContext.currentTime;
-                const startTime = Math.max(currentTime, nextPlayTime);
+                // 计算播放时间
+                const duration = audioBuffer.duration;
+                const startTime = Math.max(audioContext.currentTime, nextPlayTime);
+                nextPlayTime = startTime + duration;
                 
-                // 添加淡入淡出效果
-                const fadeDuration = 0.005; // 5ms的淡入淡出
-                gainNode.gain.setValueAtTime(0, startTime);
-                gainNode.gain.linearRampToValueAtTime(1, startTime + fadeDuration);
-                gainNode.gain.setValueAtTime(1, startTime + audioBuffer.duration - fadeDuration);
-                gainNode.gain.linearRampToValueAtTime(0, startTime + audioBuffer.duration);
-                
+                // 开始播放
                 source.start(startTime);
-                nextPlayTime = startTime + audioBuffer.duration;
+                setAvatarState('speaking'); // 设置虚拟形象为说话状态
                 
-                // 设置虚拟形象为说话状态
-                setAvatarState('speaking');
+                // 播放完成后继续播放下一段
+                setTimeout(() => {
+                    playNextAudio();
+                }, (nextPlayTime - audioContext.currentTime) * 1000);
                 
-                // 如果队列中还有数据，使用 setTimeout 来安排下一次播放
-                if (audioQueue.length > 0) {
-                    const timeUntilNextPlay = (startTime - currentTime) * 1000;
-                    setTimeout(() => playNextAudio(), Math.max(0, timeUntilNextPlay));
-                } else {
-                    source.onended = () => {
-                        setTimeout(() => {
-                            if (audioQueue.length > 0) {
-                                playNextAudio();
-                            } else {
-                                isPlaying = false;
-                                setAvatarState('idle'); // 音频播放结束，设置虚拟形象为空闲状态
-                            }
-                        }, 50); // 50ms的缓冲时间
-                    };
-                }
-            } catch (e) {
-                console.error('Audio playback error:', e);
-                isPlaying = false;
-                setAvatarState('idle'); // 出错时，设置虚拟形象为空闲状态
-                if (audioQueue.length > 0) {
-                    setTimeout(() => playNextAudio(), 100);
-                }
+            } catch (error) {
+                console.error('播放音频时出错:', error);
+                // 出错时继续尝试播放下一段
+                playNextAudio();
             }
         }
 
@@ -944,3 +925,83 @@
     </script>
 </body>
 </html>
+
+function queueAudio(audioData) {
+    audioQueue.push(audioData);
+    if (!isPlaying) {
+        playNextAudio();
+    }
+}
+
+async function playNextAudio() {
+    if (audioQueue.length === 0) {
+        isPlaying = false;
+        return;
+    }
+    
+    isPlaying = true;
+    const audioData = audioQueue.shift();
+    
+    try {
+        // 确保AudioContext已创建
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            nextPlayTime = audioContext.currentTime;
+        }
+        
+        // 将Blob转换为ArrayBuffer
+        const arrayBuffer = await audioData.arrayBuffer();
+        
+        // 解码音频数据
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer).catch(err => {
+            console.error('解码音频失败:', err);
+            // 如果解码失败，尝试手动处理PCM数据
+            return processPCMData(arrayBuffer);
+        });
+        
+        // 创建音频源并播放
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        
+        // 使用计划播放时间，确保音频连续播放
+        const startTime = Math.max(nextPlayTime, audioContext.currentTime);
+        source.start(startTime);
+        nextPlayTime = startTime + audioBuffer.duration;
+        
+        // 监听播放结束事件
+        source.onended = function() {
+            playNextAudio();
+        };
+    } catch (error) {
+        console.error('播放音频时出错:', error);
+        playNextAudio(); // 出错时继续播放下一段
+    }
+}
+
+// 手动处理PCM数据（当标准解码失败时使用）
+function processPCMData(arrayBuffer) {
+    // 创建一个新的AudioContext用于处理PCM数据
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // 假设数据是16位PCM，小端序
+    const pcmData = new Int16Array(arrayBuffer);
+    
+    // 创建相同长度的Float32Array
+    const float32Data = new Float32Array(pcmData.length);
+    
+    // 将16位PCM数据转换为Float32Array
+    // Int16的范围是-32768到32767，除以32768进行归一化到-1.0到1.0
+    for (let i = 0; i < pcmData.length; i++) {
+        float32Data[i] = pcmData[i] / 32768.0;
+    }
+    
+    // 创建AudioBuffer
+    // 假设采样率为8000（根据您的hello消息中的设置）
+    const audioBuffer = ctx.createBuffer(1, float32Data.length, 8000);
+    
+    // 将Float32Array数据复制到AudioBuffer
+    audioBuffer.copyToChannel(float32Data, 0);
+    
+    return audioBuffer;
+}

@@ -4,6 +4,7 @@ import os
 import json
 from dotenv import load_dotenv
 import uuid
+import time  # 添加这一行
 import wave
 import io
 import numpy as np
@@ -62,60 +63,6 @@ def get_client_id():
         return new_client_id
     return CLIENT_ID
 
-
-def pcm_to_opus(pcm_data):
-    """将PCM音频数据转换为Opus格式"""
-    try:
-        # 创建编码器：16kHz, 单声道, VOIP模式
-        encoder = opuslib.Encoder(16000, 1, 'voip')
-
-        try:
-            # 确保PCM数据是Int16格式
-            pcm_array = np.frombuffer(pcm_data, dtype=np.int16)
-
-            # 编码PCM数据，每帧960个采样点
-            opus_data = encoder.encode(pcm_array.tobytes(), 960)  # 60ms at 16kHz
-            return opus_data
-
-        except opuslib.OpusError as e:
-            print(f"Opus编码错误: {e}, 数据长度: {len(pcm_data)}")
-            return None
-
-    except Exception as e:
-        print(f"Opus初始化错误: {e}")
-        return None
-
-
-def opus_to_wav(opus_data):
-    """将Opus音频数据转换为WAV格式"""
-    try:
-        # 创建解码器：16kHz, 单声道
-        decoder = opuslib.Decoder(16000, 1)
-
-        try:
-            # 解码Opus数据
-            pcm_data = decoder.decode(opus_data, 960)  # 使用960采样点
-            if pcm_data:
-                # 将PCM数据转换为numpy数组
-                audio_array = np.frombuffer(pcm_data, dtype=np.int16)
-
-                # 创建WAV文件
-                wav_io = io.BytesIO()
-                with wave.open(wav_io, 'wb') as wav:
-                    wav.setnchannels(1)  # 单声道
-                    wav.setsampwidth(2)  # 16位
-                    wav.setframerate(16000)  # 16kHz
-                    wav.writeframes(audio_array.tobytes())
-                return wav_io.getvalue()
-            return None
-
-        except opuslib.OpusError as e:
-            print(f"Opus解码错误: {e}, 数据长度: {len(opus_data)}")
-            return None
-
-    except Exception as e:
-        print(f"音频处理错误: {e}")
-        return None
 
 
 class AudioProcessor:
@@ -232,6 +179,18 @@ class WebSocketProxy:
     async def handle_server_messages(self, server_ws, client_ws):
         """处理来自服务器的消息"""
         try:
+            # 创建音频保存目录
+            audio_dir = os.path.join(os.path.dirname(__file__), "audio_files")
+            os.makedirs(audio_dir, exist_ok=True)
+            
+            # 为每个会话创建唯一的文件名
+            session_timestamp = int(time.time())
+            audio_file_path = os.path.join(audio_dir, f"audio_{session_timestamp}.pcm")
+            audio_file = None
+            
+            # PCM 数据缓冲区
+            pcm_buffer = bytearray()
+            
             async for message in server_ws:
                 if isinstance(message, str):
                     try:
@@ -239,45 +198,57 @@ class WebSocketProxy:
                         if msg_data.get('type') == 'tts' and msg_data.get('state') == 'start':
                             # 新的音频流开始，重置状态
                             print("处理服务器音频数据-新的音频流开始，重置状态")
-                            if len(self.audio_buffer) > 44:  # 如果还有未播放的数据，先发送
-                                size_bytes = (self.total_samples * 2 + 36).to_bytes(4, 'little')
-                                data_bytes = (self.total_samples * 2).to_bytes(4, 'little')
-                                self.audio_buffer[4:8] = size_bytes
-                                self.audio_buffer[40:44] = data_bytes
-                                await client_ws.send(bytes(self.audio_buffer))
+                            
+                            # 如果还有未播放的数据，先发送
+                            if len(pcm_buffer) > 0:
+                                # 添加WAV头后发送
+                                wav_data = self.create_wav_header(len(pcm_buffer) // 2)
+                                wav_data.extend(pcm_buffer)
+                                await client_ws.send(bytes(wav_data))
+                                
+                                # 保存之前的音频数据到文件
+                                if audio_file:
+                                    audio_file.close()
+                                
+                                # 为新的音频流创建新的文件
+                                audio_file_path = os.path.join(audio_dir, f"audio_{int(time.time())}.pcm")
+                                audio_file = open(audio_file_path, "wb")
+                                audio_file.write(bytes(pcm_buffer))
+                                print(f"音频数据已保存到: {audio_file_path}")
 
                             # 完全重置状态
-                            self.audio_buffer = bytearray()
-                            self.is_first_audio = True
+                            pcm_buffer = bytearray()
                             self.total_samples = 0
-                            self.decoder = opuslib.Decoder(16000, 1)  # 重新创建解码器
 
                         elif msg_data.get('type') == 'tts' and msg_data.get('state') == 'stop':
                             # 音频流结束，发送剩余数据
-                            print("处理服务器音频数据-新的音频流开始，音频流结束，发送剩余数据")
-                            if len(self.audio_buffer) > 44:  # 确保有音频数据
-                                # 更新最终的WAV头
-                                size_bytes = (self.total_samples * 2 + 36).to_bytes(4, 'little')
-                                data_bytes = (self.total_samples * 2).to_bytes(4, 'little')
-                                self.audio_buffer[4:8] = size_bytes
-                                self.audio_buffer[40:44] = data_bytes
-                                await client_ws.send(bytes(self.audio_buffer))
+                            print("处理服务器音频数据-音频流结束，发送剩余数据")
+                            if len(pcm_buffer) > 0:
+                                # 添加WAV头后发送
+                                wav_data = self.create_wav_header(len(pcm_buffer) // 2)
+                                wav_data.extend(pcm_buffer)
+                                await client_ws.send(bytes(wav_data))
+                                
+                                # 保存最终的音频数据到文件
+                                if audio_file:
+                                    audio_file.write(bytes(pcm_buffer))
+                                    audio_file.close()
+                                    print(f"音频数据已完成保存到: {audio_file_path}")
+                                    audio_file = None
 
                                 # 等待一小段时间确保音频播放完成
                                 await asyncio.sleep(0.1)
 
                                 # 完全重置状态
-                                self.audio_buffer = bytearray()
-                                self.is_first_audio = True
+                                pcm_buffer = bytearray()
                                 self.total_samples = 0
-                                self.decoder = opuslib.Decoder(16000, 1)  # 重新创建解码器
 
                         await client_ws.send(message)
                     except json.JSONDecodeError:
                         await client_ws.send(message)
                 else:
                     try:
-                        # 直接处理PCM数据，不需要解码Opus
+                        # 直接处理PCM数据
                         print("处理服务器音频数据-pcm")
                         pcm_data = message  # 直接使用PCM数据
                         if pcm_data:
@@ -285,33 +256,48 @@ class WebSocketProxy:
                             samples = len(pcm_data) // 2  # 16位音频，每个采样2字节
                             self.total_samples += samples
 
-                            if self.is_first_audio:
-                                # 第一个音频片段，写入WAV头
-                                self.audio_buffer.extend(self.create_wav_header(self.total_samples))
-                                self.is_first_audio = False
+                            # 如果文件还没有打开，则打开文件
+                            if audio_file is None:
+                                audio_file_path = os.path.join(audio_dir, f"audio_{int(time.time())}.pcm")
+                                try:
+                                    audio_file = open(audio_file_path, "wb")
+                                    print(f"创建新的音频文件: {audio_file_path}")
+                                except Exception as e:
+                                    print(f"创建音频文件失败: {e}")
 
-                            # 添加音频数据
-                            self.audio_buffer.extend(pcm_data)
+                            # 直接添加PCM数据到缓冲区，不添加WAV头
+                            pcm_buffer.extend(pcm_data)
+                            
+                            # 将新的音频数据追加到文件
+                            if audio_file:
+                                try:
+                                    audio_file.write(pcm_data)
+                                    audio_file.flush()  # 确保数据立即写入磁盘
+                                except Exception as e:
+                                    print(f"写入音频文件失败: {e}")
 
                             # 当缓冲区达到一定大小时发送数据
-                            if len(self.audio_buffer) >= 16044:  # WAV头(44字节) + 8000个采样(16000字节)
-                                # 更新WAV头中的数据大小
-                                size_bytes = (self.total_samples * 2 + 36).to_bytes(4, 'little')
-                                data_bytes = (self.total_samples * 2).to_bytes(4, 'little')
-                                self.audio_buffer[4:8] = size_bytes
-                                self.audio_buffer[40:44] = data_bytes
-
-                                # 发送数据
-                                await client_ws.send(bytes(self.audio_buffer))
-
-                                # 完全重置缓冲区
-                                self.audio_buffer = bytearray()
-                                self.is_first_audio = True
-                                self.total_samples = 0
+                            if len(pcm_buffer) >= 16000:  # 约1秒的音频数据
+                                # 添加WAV头后发送
+                                wav_data = self.create_wav_header(len(pcm_buffer) // 2)
+                                wav_data.extend(pcm_buffer)
+                                await client_ws.send(bytes(wav_data))
+                                
+                                # 重置PCM缓冲区
+                                pcm_buffer = bytearray()
                     except Exception as e:
                         print(f"音频处理错误: {e}")
+                        
+            # 确保文件被关闭
+            if audio_file:
+                audio_file.close()
+                print(f"音频文件已关闭: {audio_file_path}")
+            
         except Exception as e:
             print(f"Server message handling error: {e}")
+            # 确保文件被关闭
+            if 'audio_file' in locals() and audio_file:
+                audio_file.close()
 
     async def handle_client_messages(self, client_ws, server_ws):
         """处理来自客户端的消息"""
