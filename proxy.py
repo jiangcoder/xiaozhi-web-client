@@ -326,7 +326,6 @@ class WebSocketProxy:
                             # 处理剩余数据
                             remaining_chunks = self.audio_processor.process_remaining()
                             for chunk in remaining_chunks:
-                                # 直接发送PCM数据，不再转换为Opus
                                 await server_ws.send(chunk)
                             # 发送处理完成消息
                             await client_ws.send(json.dumps({'type': 'lastData'}))
@@ -335,9 +334,7 @@ class WebSocketProxy:
                     except json.JSONDecodeError:
                         await server_ws.send(message)
                 else:
-                    #print("处理客户端音频数据")
                     try:
-                        # 确保数据是 Float32Array 格式
                         audio_data = np.frombuffer(message, dtype=np.float32)
                         if len(audio_data) > 0:
                             # 使用AudioProcessor处理音频数据
